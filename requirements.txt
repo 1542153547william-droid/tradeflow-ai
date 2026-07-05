@@ -1,7 +1,14 @@
-# Core harness has ZERO required runtime deps — it runs on MockProvider today.
-# The following are optional, needed only when going live:
+# Web layer (public page + API):
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
+# Model provider — needed once you go live with a real key:
 anthropic>=0.39.0        # real Claude provider (fill in ANTHROPIC_API_KEY)
 python-dotenv>=1.0.0     # load .env into the environment (optional)
 
 # Dev / test:
 pytest>=7.0.0
+
+# Note: the core harness itself (tradeflow/) has ZERO required deps and runs on
+# MockProvider. The above are for serving it as a web app / going live.
