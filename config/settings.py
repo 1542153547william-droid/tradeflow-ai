@@ -30,6 +30,13 @@ class Settings:
     max_tokens: int = int(os.environ.get("TRADEFLOW_MAX_TOKENS", "4096"))
     # "mock" until keys/params are wired; flip to "anthropic" to go live.
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
+    # Alibaba Bailian / DashScope (Qwen) — OpenAI-compatible, works from mainland.
+    bailian_api_key: Optional[str] = (
+        os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("BAILIAN_API_KEY")
+    )
+    bailian_base_url: str = os.environ.get(
+        "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
     # For mainland-China hosts that can't reach api.anthropic.com directly.
     # Set ONE of these to route around the block:
     #   base_url — an overseas relay that forwards to Anthropic (recommended)

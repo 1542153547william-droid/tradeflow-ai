@@ -3,7 +3,8 @@ fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 pydantic>=2.0.0
 
-# Model provider — needed once you go live with a real key:
+# Model providers — install the one(s) you use:
+openai>=1.30.0           # OpenAI-compatible provider (Alibaba Bailian / Qwen, etc.)
 anthropic>=0.39.0        # real Claude provider (fill in ANTHROPIC_API_KEY)
 python-dotenv>=1.0.0     # load .env into the environment (optional)
 

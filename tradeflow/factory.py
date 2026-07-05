@@ -29,6 +29,17 @@ def build_provider(provider_name: Optional[str] = None) -> LLMProvider:
             base_url=settings.anthropic_base_url,
             proxy=settings.anthropic_proxy,
         )
+    if name in ("bailian", "dashscope", "qwen"):
+        from .llm.openai_provider import OpenAICompatProvider
+        model = settings.default_model
+        if model.startswith("claude"):  # claude default doesn't apply to Qwen
+            model = "qwen-plus"
+        cfg = ModelConfig(model=model, max_tokens=settings.max_tokens)
+        return OpenAICompatProvider(
+            api_key=settings.bailian_api_key,
+            config=cfg,
+            base_url=settings.bailian_base_url,
+        )
     if name == "mock":
         from .llm.mock_provider import MockProvider
         return MockProvider(config=config)
