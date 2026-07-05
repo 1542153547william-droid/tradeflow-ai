@@ -71,6 +71,21 @@ vi .env
   ANTHROPIC_API_KEY=sk-ant-xxxxx
   ```
 
+> ⚠️ **本机是杭州（大陆）节点，`api.anthropic.com` 被墙**。必须二选一配置出口，
+> 否则 anthropic 模式会连接超时：
+>
+> - **方式 A（推荐）· 海外中转 base_url**：有一个海外的反代/网关转发到 Anthropic，
+>   在 `.env` 里设 `ANTHROPIC_BASE_URL=https://你的中转域名`。最稳。
+> - **方式 B · 代理**：`.env` 里设 `ANTHROPIC_PROXY=http://用户:密码@代理IP:端口`
+>   （socks5 需在镜像里 `pip install "httpx[socks]"`）。
+>
+> 验证出口是否通（在服务器上）：
+> ```bash
+> curl -sS https://你的中转域名/v1/models -H "x-api-key: $ANTHROPIC_API_KEY" \
+>      -H "anthropic-version: 2023-06-01" | head
+> # 或走代理：curl -x $ANTHROPIC_PROXY https://api.anthropic.com/v1/models ...
+> ```
+
 ## 6. 构建并启动
 
 ```bash

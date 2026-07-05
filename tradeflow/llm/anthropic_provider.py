@@ -27,9 +27,17 @@ from .base import (
 
 class AnthropicProvider(LLMProvider):
     def __init__(self, api_key: Optional[str] = None,
-                 config: Optional[ModelConfig] = None) -> None:
+                 config: Optional[ModelConfig] = None,
+                 base_url: Optional[str] = None,
+                 proxy: Optional[str] = None) -> None:
         super().__init__(config)
         self._api_key = api_key
+        # base_url: point at an overseas relay that forwards to Anthropic
+        #   (common for mainland-China hosts that can't reach api.anthropic.com).
+        # proxy: route the SDK's HTTPS calls through an http/socks proxy instead.
+        # Use at most one; base_url is usually the more reliable of the two.
+        self._base_url = base_url
+        self._proxy = proxy
         self._client = None  # lazily constructed on first call
 
     def _ensure_client(self):
@@ -47,7 +55,14 @@ class AnthropicProvider(LLMProvider):
                 "No Anthropic API key configured. Set ANTHROPIC_API_KEY "
                 "(see config/settings.py) before using AnthropicProvider."
             )
-        self._client = anthropic.Anthropic(api_key=self._api_key)
+        kwargs: Dict[str, Any] = {"api_key": self._api_key}
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        if self._proxy:
+            # anthropic SDK uses httpx under the hood; hand it a proxied client.
+            import httpx  # type: ignore  (installed with anthropic)
+            kwargs["http_client"] = httpx.Client(proxy=self._proxy)
+        self._client = anthropic.Anthropic(**kwargs)
 
     def complete(
         self,

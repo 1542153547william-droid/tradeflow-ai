@@ -30,6 +30,16 @@ class Settings:
     max_tokens: int = int(os.environ.get("TRADEFLOW_MAX_TOKENS", "4096"))
     # "mock" until keys/params are wired; flip to "anthropic" to go live.
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
+    # For mainland-China hosts that can't reach api.anthropic.com directly.
+    # Set ONE of these to route around the block:
+    #   base_url — an overseas relay that forwards to Anthropic (recommended)
+    #   proxy    — an http/socks proxy the SDK dials through
+    anthropic_base_url: Optional[str] = os.environ.get("ANTHROPIC_BASE_URL")
+    anthropic_proxy: Optional[str] = (
+        os.environ.get("ANTHROPIC_PROXY")
+        or os.environ.get("HTTPS_PROXY")
+        or os.environ.get("ALL_PROXY")
+    )
 
 
 settings = Settings()

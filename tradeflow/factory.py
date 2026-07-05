@@ -23,7 +23,12 @@ def build_provider(provider_name: Optional[str] = None) -> LLMProvider:
     config = ModelConfig(model=settings.default_model, max_tokens=settings.max_tokens)
     if name == "anthropic":
         from .llm.anthropic_provider import AnthropicProvider
-        return AnthropicProvider(api_key=settings.anthropic_api_key, config=config)
+        return AnthropicProvider(
+            api_key=settings.anthropic_api_key,
+            config=config,
+            base_url=settings.anthropic_base_url,
+            proxy=settings.anthropic_proxy,
+        )
     if name == "mock":
         from .llm.mock_provider import MockProvider
         return MockProvider(config=config)
