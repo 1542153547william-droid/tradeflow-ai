@@ -1,0 +1,7 @@
+# Core harness has ZERO required runtime deps — it runs on MockProvider today.
+# The following are optional, needed only when going live:
+anthropic>=0.39.0        # real Claude provider (fill in ANTHROPIC_API_KEY)
+python-dotenv>=1.0.0     # load .env into the environment (optional)
+
+# Dev / test:
+pytest>=7.0.0
