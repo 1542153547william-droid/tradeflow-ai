@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 环境与缓存
+.env
+cache.db
+*.sqlite3
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 前端构建（如后续接入 Vite）
+frontend/node_modules/

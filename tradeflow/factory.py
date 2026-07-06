@@ -40,6 +40,17 @@ def build_provider(provider_name: Optional[str] = None) -> LLMProvider:
             config=cfg,
             base_url=settings.bailian_base_url,
         )
+    if name == "deepseek":
+        from .llm.openai_provider import OpenAICompatProvider
+        model = settings.default_model
+        if model.startswith("claude"):  # claude default doesn't apply to DeepSeek
+            model = "deepseek-chat"
+        cfg = ModelConfig(model=model, max_tokens=settings.max_tokens)
+        return OpenAICompatProvider(
+            api_key=settings.deepseek_api_key,
+            config=cfg,
+            base_url=settings.deepseek_base_url,
+        )
     if name == "mock":
         from .llm.mock_provider import MockProvider
         return MockProvider(config=config)

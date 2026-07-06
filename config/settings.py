@@ -30,12 +30,20 @@ class Settings:
     max_tokens: int = int(os.environ.get("TRADEFLOW_MAX_TOKENS", "4096"))
     # "mock" until keys/params are wired; flip to "anthropic" to go live.
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
+    # Amazon 查询系统（独立 HTTP 服务）的地址，供 tools/amazon.py 调用。
+    amazon_api_url: str = os.environ.get("AMAZON_API_URL", "http://127.0.0.1:8000")
     # Alibaba Bailian / DashScope (Qwen) — OpenAI-compatible, works from mainland.
     bailian_api_key: Optional[str] = (
         os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("BAILIAN_API_KEY")
     )
     bailian_base_url: str = os.environ.get(
         "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+    # DeepSeek — also OpenAI-compatible, reachable from mainland. Set
+    # provider=deepseek, TRADEFLOW_MODEL=deepseek-chat, and your key here.
+    deepseek_api_key: Optional[str] = os.environ.get("DEEPSEEK_API_KEY")
+    deepseek_base_url: str = os.environ.get(
+        "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
     )
     # For mainland-China hosts that can't reach api.anthropic.com directly.
     # Set ONE of these to route around the block:

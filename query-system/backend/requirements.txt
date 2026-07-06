@@ -1,0 +1,26 @@
+# ---- Web 框架（ASGI）----
+# 本项目基于 Starlette（FastAPI 的底层框架），异步、轻量、可移植。
+starlette>=0.37
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# ---- HTTP 客户端（第三方 API 数据源）----
+httpx>=0.27
+
+# ---- 爬虫（回退通道）----
+playwright>=1.44
+
+# ---- 导出 ----
+openpyxl>=3.1
+
+# ---- 评论分析（均为增强项，缺失时代码自动回退到基于星级/正则的实现）----
+#   vaderSentiment  英文情感   jieba  中文分词   snownlp  中文情感
+vaderSentiment>=3.3 ; python_version >= "3.8"
+jieba>=0.42
+snownlp>=0.12
+
+# ---- 测试 ----
+# 若环境可安装 pytest 则用 pytest；否则直接运行 tests/smoke_test.py
+pytest>=8.0
+pytest-asyncio>=0.23

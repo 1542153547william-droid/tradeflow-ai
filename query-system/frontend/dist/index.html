@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Amazon 关键词查询分析系统</title>
+<script src="vendor/chart.umd.min.js"></script>
+<style>
+  :root {
+    --amz-orange: #ff9900;
+    --amz-dark: #131921;
+    --amz-blue: #146eb4;
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --pos: #16a34a; --neu: #f59e0b; --neg: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    background: var(--amz-dark); color: #fff; padding: 16px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header .logo { font-size: 22px; font-weight: 700; }
+  header .logo span { color: var(--amz-orange); }
+  header .sub { color: #9ca3af; font-size: 13px; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 24px; }
+  .search-bar {
+    display: flex; gap: 10px; background: var(--card); padding: 16px;
+    border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-bar input[type=text] {
+    flex: 1; min-width: 240px; padding: 12px 14px; font-size: 15px;
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .search-bar select {
+    padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+  }
+  .btn {
+    background: var(--amz-orange); color: #131921; border: none; padding: 12px 22px;
+    font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer;
+  }
+  .btn:hover { filter: brightness(.95); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.secondary { background: #e5e7eb; color: #374151; }
+  label.check { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .meta { margin: 18px 0 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 600;
+  }
+  .badge.api { background: #dcfce7; color: #166534; }
+  .badge.scraper { background: #fef3c7; color: #92400e; }
+  .badge.mock { background: #e0e7ff; color: #3730a3; }
+  .badge.cache { background: #f3e8ff; color: #6b21a8; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border-radius: 12px; padding: 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .card h3 { margin: 0 0 12px; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; background: #fafafa; position: sticky; top: 0; }
+  td.rank { font-weight: 700; color: var(--amz-orange); text-align: center; width: 34px; }
+  td .title { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td a { color: var(--amz-blue); text-decoration: none; }
+  .price { font-weight: 700; }
+  .strike { color: var(--muted); text-decoration: line-through; font-size: 11px; margin-left: 4px; }
+  .stars { color: var(--amz-orange); }
+  .prime { color: var(--amz-blue); font-weight: 700; font-size: 11px; }
+  .table-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  .senti-row { display: flex; gap: 16px; align-items: center; }
+  .senti-chart { width: 150px; height: 150px; }
+  .kw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip {
+    background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;
+    padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  }
+  .empty, .loading { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .spinner {
+    width: 34px; height: 34px; border: 4px solid var(--border);
+    border-top-color: var(--amz-orange); border-radius: 50%;
+    animation: spin 1s linear infinite; margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 12px 16px; border-radius: 8px; margin-top: 16px; }
+  .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; }
+  .stat b { font-weight: 600; }
+  .notice { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">amazon<span>·</span>关键词分析</div>
+  <div class="sub">输入关键词 → 抓取 TOP10 产品 → 结构化分析与导出</div>
+</header>
+
+<div class="container">
+  <div class="search-bar">
+    <input id="keyword" type="text" placeholder="输入关键词，例如：wireless earbuds / 无线耳机" />
+    <select id="platform" title="平台"><option value="amazon">Amazon</option></select>
+    <select id="marketplace">
+      <option value="amazon.com">amazon.com（美国）</option>
+      <option value="amazon.co.uk">amazon.co.uk（英国）</option>
+      <option value="amazon.de">amazon.de（德国）</option>
+      <option value="amazon.co.jp">amazon.co.jp（日本）</option>
+    </select>
+    <select id="topn">
+      <option value="10">TOP 10</option>
+      <option value="5">TOP 5</option>
+      <option value="20">TOP 20</option>
+    </select>
+    <label class="check"><input type="checkbox" id="reviews" checked /> 分析评论</label>
+    <label class="check"><input type="checkbox" id="forceRefresh" /> 强制刷新（跳过缓存）</label>
+    <button class="btn" id="searchBtn" onclick="doSearch()">查询</button>
+  </div>
+  <div class="notice">提示：无 API Key 时系统会用爬虫抓取；抓取失败会直接返回「查询失败」，不再回退示例数据（如需离线演示可在后端设 ALLOW_MOCK_FALLBACK=true）。</div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+// 由后端同源托管时用相对地址；若从 file:// 或无 origin 的预览环境打开，
+// 相对地址无法解析（Failed to parse URL），回退到本地后端绝对地址。
+const API = /^https?:$/.test(location.protocol) ? "" : "http://127.0.0.1:8000";
+let priceChart, ratingChart, sentiChart;
+
+function starStr(r){
+  if(r==null) return "—";
+  const full = Math.round(r);
+  return '<span class="stars">'+'★'.repeat(full)+'☆'.repeat(5-full)+'</span> '+r;
+}
+function money(v, c){ return v==null ? "—" : (c==="USD"?"$":"")+Number(v).toFixed(2); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s==null?"":s; return d.innerHTML; }
+
+function detailCell(p){
+  const ct=p.content, lg=p.logistics, bi=p.base_info, pr=p.pricing;
+  const hasAny = (ct.bullet_points&&ct.bullet_points.length) || lg.dimensions || lg.weight
+    || ct.image_count!=null || ct.has_video || ct.variant_attributes || (p.qa_sample&&p.qa_sample.length)
+    || (bi.rank_sub_nodes&&bi.rank_sub_nodes.length);
+  if(!hasAny) return '<span style="color:#9ca3af">—</span>';
+  let h = '<details><summary style="cursor:pointer;color:#146eb4">展开</summary><div style="font-size:12px;padding:6px 0;max-width:360px">';
+  if(lg.seller) h += '<div>卖家：'+esc(lg.seller)+'</div>';
+  if(lg.dimensions) h += '<div>尺寸：'+esc(lg.dimensions)+'</div>';
+  if(lg.weight!=null) h += '<div>重量：'+lg.weight+'</div>';
+  if(ct.image_count!=null) h += '<div>图片数：'+ct.image_count+(ct.has_video?' · 含视频🎬':'')+'</div>';
+  if(bi.parent_id) h += '<div>父体：'+esc(bi.parent_id)+'</div>';
+  if(ct.variant_attributes){ h += '<div>变体：'+esc(Object.entries(ct.variant_attributes).map(e=>e[0]+':'+e[1]).join(' / '))+'</div>'; }
+  if(bi.rank_sub_nodes&&bi.rank_sub_nodes.length){ h += '<div>子类目：'+bi.rank_sub_nodes.map(n=>esc(n.node)+' #'+n.rank).join(' / ')+'</div>'; }
+  if(ct.bullet_points&&ct.bullet_points.length){
+    h += '<div style="margin-top:4px">五点：<ul style="margin:2px 0 0 16px;padding:0">';
+    ct.bullet_points.slice(0,5).forEach(b=>{ h += '<li>'+esc(b)+'</li>'; });
+    h += '</ul></div>';
+  }
+  if(p.qa_sample&&p.qa_sample.length){ h += '<div style="margin-top:4px">Q&A：'+p.qa_sample.length+' 条</div>'; }
+  if(pr.price_history&&pr.price_history.length>1){ h += '<div>历史价格点：'+pr.price_history.length+' 天</div>'; }
+  h += '</div></details>';
+  return h;
+}
+
+async function doSearch(){
+  const keyword = document.getElementById('keyword').value.trim();
+  if(!keyword){ alert('请输入关键词'); return; }
+  const platform = document.getElementById('platform').value;
+  const marketplace = document.getElementById('marketplace').value;
+  const top_n = parseInt(document.getElementById('topn').value);
+  const include_reviews = document.getElementById('reviews').checked;
+  const force_refresh = document.getElementById('forceRefresh').checked;
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  document.getElementById('result').innerHTML =
+    '<div class="loading"><div class="spinner"></div>正在查询 “'+esc(keyword)+'” …</div>';
+  try{
+    const resp = await fetch(API+'/api/search', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({keyword, platform, marketplace, top_n, include_reviews, force_refresh})
+    });
+    if(!resp.ok){ const e = await resp.json().catch(()=>({detail:resp.statusText})); throw new Error(JSON.stringify(e.detail)); }
+    const data = await resp.json();
+    render(data);
+  }catch(err){
+    document.getElementById('result').innerHTML = '<div class="error">查询失败：'+esc(err.message)+'</div>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function render(d){
+  const badgeMap = {api:'官方/第三方 API', scraper:'浏览器爬虫', mock:'示例数据', cache:'缓存'};
+  const kw = encodeURIComponent(d.keyword);
+  const mp = encodeURIComponent(d.marketplace);
+  let html = '';
+  html += '<div class="meta">';
+  html += '<strong>“'+esc(d.keyword)+'”</strong> · '+esc(d.marketplace);
+  html += ' <span class="badge '+d.source+'">数据源：'+(badgeMap[d.source]||d.source)+'</span>';
+  html += ' <span style="flex:1"></span>';
+  html += '<button class="btn secondary" onclick="downloadFile(\''+kw+'\',\''+mp+'\','+d.products.length+',\'xlsx\')">⬇ 导出 Excel</button>';
+  html += '<button class="btn secondary" onclick="downloadFile(\''+kw+'\',\''+mp+'\','+d.products.length+',\'csv\')">⬇ 导出 CSV</button>';
+  html += '</div>';
+
+  // 表格
+  html += '<div class="card"><h3>TOP '+d.products.length+' 产品</h3><div class="table-wrap"><table>';
+  html += '<thead><tr><th>排名</th><th>标题</th><th>品牌</th><th>价格</th><th>评分</th><th>评论数</th><th>BSR</th><th>发货</th><th>徽章</th><th>详情</th></tr></thead><tbody>';
+  for(const p of d.products){
+    const bi=p.base_info, pr=p.pricing, lg=p.logistics, ct=p.content, sc=p.search_context;
+    const rank = sc.organic_rank!=null ? ('自然#'+sc.organic_rank)
+               : (sc.sponsored_rank!=null ? ('<span style="color:#92400e">广告#'+sc.sponsored_rank+'</span>') : '—');
+    const coupon = pr.coupon ? ' <span class="chip" style="font-size:11px;background:#dcfce7;color:#166534">'+esc(pr.coupon.text)+'</span>' : '';
+    const bsr = bi.rank!=null ? ('#'+bi.rank.toLocaleString()+(bi.rank_category?'<div style="font-size:10px;color:#6b7280">'+esc(bi.rank_category)+'</div>':'')) : '—';
+    html += '<tr>';
+    html += '<td class="rank">'+rank+'</td>';
+    html += '<td><a class="title" href="'+esc(bi.product_url)+'" target="_blank" title="'+esc(bi.title)+'">'+esc(bi.title)+'</a>'+coupon+'</td>';
+    html += '<td>'+esc(bi.brand||'—')+'</td>';
+    html += '<td class="price">'+money(pr.price,pr.currency)+ (pr.list_price?'<span class="strike">'+money(pr.list_price,pr.currency)+'</span>':'') +(pr.fast_shipping?' <span class="prime">✓</span>':'')+'</td>';
+    html += '<td>'+starStr(bi.rating)+'</td>';
+    html += '<td>'+(bi.review_count!=null?bi.review_count.toLocaleString():'—')+'</td>';
+    html += '<td>'+bsr+'</td>';
+    html += '<td>'+esc(lg.fulfillment||'—')+'</td>';
+    html += '<td>'+(bi.badges&&bi.badges.length?bi.badges.map(b=>'<span class="chip" style="font-size:10px">'+esc(b)+'</span>').join(' '):'—')+'</td>';
+    html += '<td>'+detailCell(p)+'</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div></div>';
+
+  // 图表 + 评论
+  html += '<div class="grid">';
+  html += '<div class="card"><h3>价格对比</h3><canvas id="priceChart" height="200"></canvas></div>';
+  html += '<div class="card"><h3>评分对比</h3><canvas id="ratingChart" height="200"></canvas></div>';
+  html += '</div>';
+
+  if(d.review_analysis){
+    const ra = d.review_analysis;
+    html += '<div class="grid">';
+    html += '<div class="card"><h3>评论情感分析（样本 '+ra.total_reviews+' 条）</h3>';
+    html += '<div class="senti-row"><div class="senti-chart"><canvas id="sentiChart"></canvas></div><div style="flex:1">';
+    html += '<div class="stat"><span>综合情感得分</span><b>'+(ra.sentiment_score*100).toFixed(1)+' / 100</b></div>';
+    html += '<div class="stat"><span style="color:var(--pos)">正面</span><b>'+(ra.positive_ratio*100).toFixed(1)+'%</b></div>';
+    html += '<div class="stat"><span style="color:var(--neu)">中性</span><b>'+(ra.neutral_ratio*100).toFixed(1)+'%</b></div>';
+    html += '<div class="stat"><span style="color:var(--neg)">负面</span><b>'+(ra.negative_ratio*100).toFixed(1)+'%</b></div>';
+    html += '</div></div></div>';
+    html += '<div class="card"><h3>评论高频关键词</h3><div class="kw-chips">';
+    if(ra.top_keywords.length===0) html += '<span class="muted">无</span>';
+    for(const k of ra.top_keywords){
+      const size = 12 + Math.min(k.weight*40, 10);
+      html += '<span class="chip" style="font-size:'+size+'px">'+esc(k.keyword)+'</span>';
+    }
+    html += '</div></div></div>';
+  }
+
+  document.getElementById('result').innerHTML = html;
+  drawCharts(d);
+}
+
+function barFallback(canvasId, values, titles, color, maxVal){
+  // Chart.js CDN 不可用时的纯 CSS 柱状图回退
+  const cv = document.getElementById(canvasId);
+  if(!cv) return;
+  const max = maxVal || Math.max(...values, 1);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;align-items:flex-end;gap:6px;height:200px;padding-top:8px';
+  values.forEach((v,i)=>{
+    const col = document.createElement('div');
+    col.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%';
+    col.title = titles[i];
+    const bar = document.createElement('div');
+    bar.style.cssText = 'width:70%;background:'+color+';border-radius:4px 4px 0 0;height:'+(Math.max(v,0)/max*160)+'px';
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;color:#6b7280;margin-top:4px';
+    lbl.textContent = '#'+(i+1);
+    const val = document.createElement('div');
+    val.style.cssText = 'font-size:10px;color:#374151;margin-bottom:2px';
+    val.textContent = v==null?'':v;
+    col.appendChild(val); col.appendChild(bar); col.appendChild(lbl);
+    wrap.appendChild(col);
+  });
+  cv.replaceWith(wrap);
+}
+
+function drawCharts(d){
+  const prices = d.products.map(p=>p.pricing.price||0);
+  const ratings = d.products.map(p=>p.base_info.rating||0);
+  const titles = d.products.map(p=>p.base_info.title);
+  if(typeof Chart==='undefined'){
+    // 离线回退：用 CSS 柱状图，保证图表区不空白
+    barFallback('priceChart', prices, titles, '#146eb4');
+    barFallback('ratingChart', ratings, titles, '#ff9900', 5);
+    return;
+  }
+  const labels = d.products.map((p,i)=>'#'+(i+1));
+  [priceChart,ratingChart,sentiChart].forEach(c=>c&&c.destroy());
+
+  priceChart = new Chart(document.getElementById('priceChart'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'价格', data:prices, backgroundColor:'#146eb4' }] },
+    options:{ plugins:{ legend:{display:false}, tooltip:{callbacks:{title:(i)=>titles[i[0].dataIndex]}} }, scales:{y:{beginAtZero:true}} }
+  });
+  ratingChart = new Chart(document.getElementById('ratingChart'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'评分', data:ratings, backgroundColor:'#ff9900' }] },
+    options:{ plugins:{ legend:{display:false}, tooltip:{callbacks:{title:(i)=>titles[i[0].dataIndex]}} }, scales:{y:{beginAtZero:true, max:5}} }
+  });
+  if(d.review_analysis){
+    const ra=d.review_analysis;
+    sentiChart = new Chart(document.getElementById('sentiChart'), {
+      type:'doughnut',
+      data:{ labels:['正面','中性','负面'],
+        datasets:[{ data:[ra.positive_ratio, ra.neutral_ratio, ra.negative_ratio],
+          backgroundColor:['#16a34a','#f59e0b','#dc2626'] }] },
+      options:{ plugins:{ legend:{position:'bottom', labels:{boxWidth:12,font:{size:11}}} }, cutout:'60%' }
+    });
+  }
+}
+
+function downloadFile(kw, mp, topn, fmt){
+  const url = API+'/api/export?keyword='+kw+'&marketplace='+mp+'&top_n='+topn+'&fmt='+fmt;
+  window.open(url, '_blank');
+}
+
+document.getElementById('keyword').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+document.getElementById('result').innerHTML = '<div class="empty">👆 输入关键词开始查询 TOP 产品</div>';
+
+// 从后端拉取已支持平台，填充下拉（以后加平台前端自动多）
+fetch(API+'/api/platforms').then(r=>r.json()).then(d=>{
+  if(!d.platforms || !d.platforms.length) return;
+  const sel = document.getElementById('platform');
+  sel.innerHTML = d.platforms.map(p=>'<option value="'+p+'">'+p.charAt(0).toUpperCase()+p.slice(1)+'</option>').join('');
+}).catch(()=>{});
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import ast
 import operator
 from typing import Dict, List
 
+from .amazon import AMAZON_TOOLS
 from .base import Tool, tool
 
 # --- safe arithmetic ------------------------------------------------------
@@ -53,4 +54,4 @@ def check_forbidden_words(text: str) -> Dict[str, object]:
     return {"passed": not hits, "violations": hits}
 
 
-BUILTIN_TOOLS = [calculator, check_forbidden_words]
+BUILTIN_TOOLS = [calculator, check_forbidden_words, *AMAZON_TOOLS]

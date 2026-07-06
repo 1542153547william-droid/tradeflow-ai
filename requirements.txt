@@ -2,6 +2,7 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 pydantic>=2.0.0
+httpx>=0.27.0            # HTTP client for the Amazon 查询系统 tool (tools/amazon.py)
 
 # Model providers — install the one(s) you use:
 openai>=1.30.0           # OpenAI-compatible provider (Alibaba Bailian / Qwen, etc.)
