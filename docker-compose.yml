@@ -8,4 +8,21 @@ services:
       - "80:8000"
     env_file:
       - .env
+    environment:
+      # Reach the query service by its compose service name (not 127.0.0.1,
+      # which inside this container would mean the web container itself).
+      - QUERY_API_URL=http://query:8000
+    depends_on:
+      - query
+    restart: unless-stopped
+
+  query:
+    build: ./query-system
+    image: tradeflow-query
+    # mock = structured sample data, no Playwright/API key needed. Switch to
+    # scraper/api (+ deps/key) for real data. Internal-only; not published.
+    environment:
+      - DATA_SOURCE_MODE=mock
+    expose:
+      - "8000"
     restart: unless-stopped
