@@ -11,11 +11,11 @@ TradeFlow-AI                          查询系统
 tradeflow/tools/amazon.py  ──HTTP──▶  POST /api/search   (带 platform)
   @tool search_products               GET  /api/platforms
   @tool list_platforms       ▲
-                    settings.amazon_api_url (env: AMAZON_API_URL)
+                    settings.query_api_url (env: QUERY_API_URL)
 ```
 
 - 耦合点只有一个文件：[`tradeflow/tools/amazon.py`](tradeflow/tools/amazon.py)
-- 服务地址：`config/settings.py::amazon_api_url`（env `AMAZON_API_URL`）
+- 服务地址：`config/settings.py::query_api_url`（env `QUERY_API_URL`）
 
 ## 契约 = `/api/search`
 
@@ -68,5 +68,5 @@ product = {
 ## 版本管理与部署
 
 - **两个独立仓库**，各自提交、各自部署。不合并、不用 submodule。
-- 上线 = 两个服务都部署好 + TradeFlow 的 `AMAZON_API_URL` 指向查询系统（内网地址）。
+- 上线 = 两个服务都部署好 + TradeFlow 的 `QUERY_API_URL` 指向查询系统（内网地址）。
   爬虫升级只需重启查询系统服务，TradeFlow 通常不必重新发版（除非契约变了）。

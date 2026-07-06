@@ -2,7 +2,7 @@
 
 查询系统（Starlette 服务，默认 http://127.0.0.1:8000）负责脏活：按平台路由 →
 API/爬虫/mock 多源回退、限流、24h SQLite 缓存、评论情感分析。这里只做一层薄
-封装。服务地址由 `settings.amazon_api_url` 配置（env: AMAZON_API_URL）。
+封装。服务地址由 `settings.query_api_url` 配置（env: QUERY_API_URL）。
 
 数据是**平台无关的通用核心**（base_info/pricing/logistics/content），跨平台可统一
 分析；平台专属字段在 base_info.platform_extra。赋能业务 Agent：#6 市场分析 /
@@ -62,7 +62,7 @@ def search_products(keyword: str, platform: str = "amazon",
     if marketplace:
         payload["marketplace"] = marketplace
     try:
-        resp = httpx.post(f"{settings.amazon_api_url}/api/search",
+        resp = httpx.post(f"{settings.query_api_url}/api/search",
                           json=payload, timeout=_SEARCH_TIMEOUT)
         resp.raise_for_status()
         return _compact(resp.json())
@@ -79,7 +79,7 @@ def list_platforms() -> Dict[str, Any]:
     except ImportError:
         return {"error": "未安装 httpx。"}
     try:
-        resp = httpx.get(f"{settings.amazon_api_url}/api/platforms", timeout=15.0)
+        resp = httpx.get(f"{settings.query_api_url}/api/platforms", timeout=15.0)
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPError as exc:
