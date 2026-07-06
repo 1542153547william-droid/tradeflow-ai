@@ -156,7 +156,10 @@ class ScraperSource(DataSource):
             self._pw = await async_playwright().start()
             launch_kwargs = {
                 "headless": self.settings.scraper_headless,
-                "args": ["--disable-blink-features=AutomationControlled"],
+                # --no-sandbox / --disable-dev-shm-usage: 在 Docker 里以 root 跑
+                # Chromium 必需（无沙箱权限、/dev/shm 偏小）。
+                "args": ["--disable-blink-features=AutomationControlled",
+                         "--no-sandbox", "--disable-dev-shm-usage"],
             }
             if self.settings.chromium_path:
                 launch_kwargs["executable_path"] = self.settings.chromium_path

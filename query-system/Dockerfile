@@ -3,14 +3,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Aliyun PyPI mirror — fast from mainland China.
+# Aliyun PyPI mirror + npmmirror for Playwright browser binaries — fast from China.
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
 
-# Deps first for layer caching. (Playwright's browser binaries are NOT installed
-# here — mock/api modes don't need them. For real scraping add `playwright install`.)
+# Aliyun apt mirror so `playwright install --with-deps` pulls system libs fast.
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' \
+      /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
+
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
+
+# Chromium + system deps for scraper mode (adds a few hundred MB to the image).
+RUN playwright install --with-deps chromium
 
 COPY backend ./backend
 COPY frontend ./frontend

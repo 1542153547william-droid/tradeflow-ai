@@ -19,10 +19,11 @@ services:
   query:
     build: ./query-system
     image: tradeflow-query
-    # mock = structured sample data, no Playwright/API key needed. Switch to
-    # scraper/api (+ deps/key) for real data. Internal-only; not published.
+    # scraper = real Amazon data via Playwright/Chromium (built into the image).
+    # NOTE: from a datacenter IP, Amazon often triggers a robot/captcha block —
+    # the tool then returns an error. mock = offline sample data; api = Rainforest.
     environment:
-      - DATA_SOURCE_MODE=mock
+      - DATA_SOURCE_MODE=scraper
     expose:
       - "8000"
     restart: unless-stopped
