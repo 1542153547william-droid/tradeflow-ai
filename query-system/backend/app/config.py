@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     scraper_fetch_brand: bool = True
     # 是否抓买家问答（Amazon 多已下线，默认关：省一半请求、降封号）
     scraper_fetch_qa: bool = False
+    # 出口代理（住宅/机房），换 IP 绕开亚马逊对数据中心 IP 的反爬。
+    # 格式：http://user:pass@host:port（或 http://host:port）；空=直连。
+    scraper_proxy: str = ""
 
     # ---- 通用 ----
     default_platform: str = "amazon"     # 未指定 platform 时的默认平台
