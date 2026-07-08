@@ -1,0 +1,6 @@
+{"text": "the best cheapest phone case on the market", "site": "US", "passed": false, "must_flag": ["best", "cheapest"]}
+{"text": "100% cure for back pain, fda approved", "site": "US", "passed": false, "must_flag": ["100% cure", "fda approved"]}
+{"text": "our no.1 rated permanent solution", "site": "US", "passed": false, "must_flag": ["no.1", "permanent"]}
+{"text": "durable silicone phone case with raised edges for screen protection", "site": "US", "passed": true, "must_flag": []}
+{"text": "lightweight water-resistant travel backpack with usb port", "site": "US", "passed": true, "must_flag": []}
+{"text": "guaranteed formula that eliminates odor completely", "site": "US", "passed": false, "must_flag": ["guaranteed", "eliminates"]}
