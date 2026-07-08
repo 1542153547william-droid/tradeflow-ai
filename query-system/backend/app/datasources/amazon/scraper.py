@@ -141,6 +141,7 @@ class ScraperSource(DataSource):
         self._browser = None
         self._pw = None
         self._launch_lock = asyncio.Lock()
+        self._proxy_i = 0  # 代理池轮换游标
 
     async def _ensure_browser(self):
         if self._browser is not None:
@@ -170,12 +171,19 @@ class ScraperSource(DataSource):
 
     async def _new_page(self, marketplace: str = "amazon.com"):
         await self._ensure_browser()
-        context = await self._browser.new_context(
+        ctx_kwargs = dict(
             user_agent=random.choice(_USER_AGENTS),
             locale="en-US",
             viewport={"width": 1366, "height": 900},
             extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
         )
+        # 代理池轮换：每开一个 context 换一个出口 IP，分散 Amazon 的 IP 风控。
+        pool = self.settings.proxy_pool()
+        if pool:
+            server = pool[self._proxy_i % len(pool)]
+            self._proxy_i += 1
+            ctx_kwargs["proxy"] = {"server": server}
+        context = await self._browser.new_context(**ctx_kwargs)
         await context.add_init_script(_STEALTH_JS)
         # Amazon 按出口 IP 猜国家/货币（如日本出口会显示 JPY 定价）。用 i18n-prefs
         # cookie 锁定为目标站点的货币，保证价格按站点币种展示、可复现。

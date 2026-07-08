@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # 出口代理（住宅/机房），换 IP 绕开亚马逊对数据中心 IP 的反爬。
     # 格式：http://user:pass@host:port（或 http://host:port）；空=直连。
     scraper_proxy: str = ""
+    # 代理池：逗号分隔的多个代理，抓取时轮换，进一步分散风控。留空则退回单个
+    # scraper_proxy；两者都空 = 直连。机房 IP 抓 Amazon 极易被限，强烈建议配住宅代理池。
+    scraper_proxies: str = ""
 
     # ---- 通用 ----
     default_platform: str = "amazon"     # 未指定 platform 时的默认平台
@@ -65,6 +68,13 @@ class Settings(BaseSettings):
         if self.scraper_enabled:
             return "scraper"
         return "mock"
+
+    def proxy_pool(self) -> list:
+        """解析代理池：优先用 scraper_proxies（逗号分隔），否则退回单个 scraper_proxy。"""
+        pool = [p.strip() for p in self.scraper_proxies.split(",") if p.strip()]
+        if not pool and self.scraper_proxy.strip():
+            pool = [self.scraper_proxy.strip()]
+        return pool
 
 
 @lru_cache

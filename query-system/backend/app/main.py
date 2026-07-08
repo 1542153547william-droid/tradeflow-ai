@@ -25,6 +25,8 @@ _routes = [
     Route("/api/config", routes.config_info, methods=["GET"]),
     Route("/api/platforms", routes.platforms, methods=["GET"]),
     Route("/api/search", routes.search, methods=["POST"]),
+    Route("/api/search/async", routes.search_async, methods=["POST"]),
+    Route("/api/tasks/{task_id}", routes.task_status, methods=["GET"]),
     Route("/api/product/{asin}", routes.product, methods=["GET"]),
     Route("/api/export", routes.export, methods=["GET"]),
 ]
