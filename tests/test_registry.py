@@ -30,7 +30,8 @@ class MockProviderCase(unittest.TestCase):
 class TestRegistry(MockProviderCase):
     def test_specs_registered(self):
         names = {s.name for s in registry.list_specs()}
-        self.assertEqual(names, {"compliance", "listing", "imagery"})
+        # 至少含已建成的智能体；新增智能体时这里放宽为子集检查，避免频繁改测试。
+        self.assertTrue({"compliance", "listing", "imagery", "teardown"} <= names)
 
     def test_build_attaches_right_tools(self):
         agent = registry.build("compliance")

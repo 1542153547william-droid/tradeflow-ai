@@ -21,6 +21,9 @@ from .tools.base import Tool, tool
 from .tools.compliance import COMPLIANCE_TOOLS
 from .tools.imagery import IMAGERY_TOOLS
 from .tools.listing import LISTING_TOOLS
+from .tools.market import MARKET_TOOLS
+from .tools.selection import SELECTION_TOOLS
+from .tools.teardown import TEARDOWN_TOOLS
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,7 @@ class AgentSpec:
     label: str           # 前端展示名
     description: str     # 一句话说明（也用作 agent_as_tool 的工具描述）
     tools: Tuple[Tool, ...]
+    subagents: Tuple[str, ...] = ()   # 编排：把这些已注册智能体当工具挂上（如 #7 调 #1#5#6）
 
 
 REGISTRY: Dict[str, AgentSpec] = {
@@ -41,6 +45,16 @@ REGISTRY: Dict[str, AgentSpec] = {
     "imagery": AgentSpec(
         "imagery", "#3 图文视频提示词",
         "绘图 prompt + 短视频脚本 + 图片规范校验", tuple(IMAGERY_TOOLS)),
+    "teardown": AgentSpec(
+        "teardown", "#5 爆款拆解",
+        "拆竞品 ASIN：Listing/变体/定价/痛点 + 运营模式判定", tuple(TEARDOWN_TOOLS)),
+    "market": AgentSpec(
+        "market", "#6 市场分析",
+        "类目/关键词蓝海红海研判：体量/竞争强度/价格带/风险", tuple(MARKET_TOOLS)),
+    "selection": AgentSpec(
+        "selection", "#7 智能选品",
+        "选品决策：多维评分+毛利测算，综合 #1/#5/#6 给风险收益结论",
+        tuple(SELECTION_TOOLS), subagents=("compliance", "teardown", "market")),
 }
 
 
@@ -55,9 +69,10 @@ def get_spec(name: str) -> AgentSpec:
 
 
 def build(name: str, observer=None, **kwargs) -> Agent:
-    """按注册信息构建一个智能体（人设+skills+它的工具集）。"""
+    """按注册信息构建一个智能体（人设+skills+它的工具集+声明的子智能体工具）。"""
     spec = get_spec(name)
-    return build_named_agent(name, tools=list(spec.tools), observer=observer, **kwargs)
+    tools = list(spec.tools) + [agent_as_tool(n) for n in spec.subagents]
+    return build_named_agent(name, tools=tools, observer=observer, **kwargs)
 
 
 def agent_as_tool(name: str) -> Tool:
