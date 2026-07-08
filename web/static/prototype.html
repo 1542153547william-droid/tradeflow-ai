@@ -670,8 +670,34 @@ button.imgbox{font-family:inherit}
     thinking('思考中…',()=>addAgent(`<div class="bubble"><div>我可以帮你挖机会商品、按类目找蓝海，或为选定商品生成整套 Listing 素材。试试：</div>${chips(['当前有哪些机会商品？','厨房家居类目有什么机会？','帮我生成加湿器的完整 Listing 素材'])}</div>`));
   }
 
+  /* ---- 真后端接线：对话直连 /api/chat（qwen + #1/#2/#3 智能体） ---- */
+  // 轻量意图路由：把请求分到已实现的真智能体（合规/图文/文案），其余走通用。
+  function pickAgent(q){q=(q||'').toLowerCase();
+    if(/(合规|违规|禁词|极限词|审一?下|侵权|能不能用)/.test(q))return 'compliance';
+    if(/(图片|配图|出图|绘图|视频|脚本|构图|主图规范)/.test(q))return 'imagery';
+    if(/(listing|素材|标题|五点|文案|描述|search *term|关键词)/.test(q))return 'listing';
+    return 'default';}
+  const AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',imagery:'#3 图文提示词'};
+  // 极简 markdown → HTML：转义后处理 **粗体**、`代码`、换行。
+  function fmt(s){let h=esc(String(s==null?'':s));
+    h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>');
+    return h.replace(/\n/g,'<br>');}
+  async function respondReal(text){
+    const agent=pickAgent(text);
+    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'+AGENT_CN[agent]+' 思考中…</div></div>');
+    try{
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:text,agent})});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();t.remove();
+      const tools=(d.steps||[]).flatMap(s=>s.tools||[]);
+      const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(tools.join(', '))}</div>`:'';
+      addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
+    }catch(e){t.remove();
+      addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))+'。请确认服务在 8000 端口运行。</div></div>');}
+  }
   /* input handling */
-  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();setTimeout(()=>respond(text.trim()),180);}
+  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();respondReal(text.trim());}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
