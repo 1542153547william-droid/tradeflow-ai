@@ -39,13 +39,18 @@ def supported_platforms() -> List[str]:
     return list(PLATFORMS.keys())
 
 
+def _norm(platform: str) -> str:
+    # 平台名大小写/空格不敏感（模型常传 "Amazon"），键统一按小写匹配。
+    return (platform or "").strip().lower()
+
+
 def has_platform(platform: str) -> bool:
-    return platform in PLATFORMS
+    return _norm(platform) in PLATFORMS
 
 
 def available_sources(platform: str) -> Dict[str, SourceFactory]:
-    return PLATFORMS.get(platform, {})
+    return PLATFORMS.get(_norm(platform), {})
 
 
 def make_source(platform: str, name: str, settings: Settings) -> DataSource:
-    return PLATFORMS[platform][name](settings)
+    return PLATFORMS[_norm(platform)][name](settings)

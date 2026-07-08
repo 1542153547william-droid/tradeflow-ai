@@ -22,32 +22,25 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from config.settings import settings  # noqa: E402
+from tradeflow import registry  # noqa: E402
 from tradeflow.agent.loop import AgentStep  # noqa: E402
-from tradeflow.compose import build_named_agent  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
-from tradeflow.tools.compliance import COMPLIANCE_TOOLS  # noqa: E402
-from tradeflow.tools.imagery import IMAGERY_TOOLS  # noqa: E402
-from tradeflow.tools.listing import LISTING_TOOLS  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
 
-# 前端可选的智能体。key → 展示信息 + 挂载的工具（人设由 build_named_agent 按 key 组合）。
-AGENTS = {
-    "default": {"label": "通用助手", "desc": "默认工具集，无专属人设", "tools": None},
-    "compliance": {"label": "#1 合规风控", "desc": "审文案/类目：禁词+IP+类目风险+白名单",
-                   "tools": COMPLIANCE_TOOLS},
-    "listing": {"label": "#2 Listing 文案", "desc": "产出多站点文案，自动埋词+过合规",
-                "tools": LISTING_TOOLS},
-    "imagery": {"label": "#3 图文视频提示词", "desc": "绘图prompt+短视频脚本+图片规范校验",
-                "tools": IMAGERY_TOOLS},
-}
+# 前端可选项 = "通用助手" + 注册表里的全部业务智能体（单一事实来源，见 0.2 registry）。
+_DEFAULT = {"key": "default", "label": "通用助手", "desc": "默认工具集，无专属人设"}
+
+
+def _agent_list() -> List[Dict[str, str]]:
+    return [_DEFAULT] + [{"key": s.name, "label": s.label, "desc": s.description}
+                         for s in registry.list_specs()]
 
 
 def _build_agent(agent_key: str, observer):
-    spec = AGENTS.get(agent_key)
-    if spec and spec["tools"] is not None:
-        return build_named_agent(agent_key, tools=spec["tools"], observer=observer)
+    if agent_key in registry.REGISTRY:
+        return registry.build(agent_key, observer=observer)
     return build_agent(observer=observer)
 
 
@@ -81,8 +74,7 @@ def info() -> Dict[str, str]:
 
 @app.get("/api/agents")
 def agents() -> List[Dict[str, str]]:
-    # 只暴露展示字段；tools 是 Tool 对象，不可 JSON 序列化，需排除。
-    return [{"key": k, "label": v["label"], "desc": v["desc"]} for k, v in AGENTS.items()]
+    return _agent_list()
 
 
 @app.post("/api/chat", response_model=ChatOut)

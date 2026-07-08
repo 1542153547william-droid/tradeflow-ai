@@ -63,6 +63,19 @@ async def search(request: Request) -> JSONResponse:
     return JSONResponse(result.model_dump(mode="json"))
 
 
+async def product(request: Request) -> JSONResponse:
+    """按 ASIN 抓单个产品全貌（Listing+变体+评价）。供 #5 拆解 / #7 选品用。"""
+    asin = request.path_params["asin"]
+    params = request.query_params
+    platform = params.get("platform") or get_settings().default_platform
+    marketplace = params.get("marketplace")
+    try:
+        result = await _service().get_product(platform, asin, marketplace)
+    except RuntimeError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+    return JSONResponse(result.model_dump(mode="json"))
+
+
 async def export(request: Request) -> Response:
     params = request.query_params
     keyword = params.get("keyword")

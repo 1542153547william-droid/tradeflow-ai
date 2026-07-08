@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
-from ..models import Product, QA, Review
+from ..models import BaseInfo, Product, QA, Review, SearchContext
 
 
 class DataSourceError(Exception):
@@ -47,6 +47,28 @@ class DataSource(ABC):
     ) -> List[QA]:
         """返回买家问答样本。默认空（亚马逊多已下线；仅爬虫尽力抓）。"""
         return []
+
+    async def fetch_product(
+        self, product_id: str, marketplace: str
+    ) -> Optional[Product]:
+        """按 product_id(ASIN) 抓单个产品全貌（任务 0.5 的 /api/product/{asin} 底座）。
+
+        默认实现：构造骨架（含 dp URL）→ fetch_detail 富化（变体/rank/content）→
+        fetch_reviews 补评论。数据源可覆盖以更精确实现；返回 None 表示不支持/未找到。
+        """
+        product = Product(
+            search_context=SearchContext(keyword=f"asin:{product_id}"),
+            base_info=BaseInfo(
+                product_id=product_id, platform=self.platform,
+                product_url=f"https://www.{marketplace}/dp/{product_id}",
+            ),
+        )
+        await self.fetch_detail(product, marketplace)
+        try:
+            product.reviews_sample = await self.fetch_reviews(product_id, marketplace)
+        except Exception:
+            product.reviews_sample = []
+        return product
 
     async def close(self) -> None:
         """释放资源（如浏览器）。默认无操作。"""
