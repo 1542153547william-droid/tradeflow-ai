@@ -25,6 +25,33 @@ from ..models import Product, SearchRequest, SearchResult
 from .review_analysis import analyze_reviews
 
 
+# 国家码 → Amazon 站点域名。上游（TradeFlow 工具/模型）常传 "US"/"UK"/"JP" 这类
+# 国家码，而爬虫按 https://www.{marketplace}/ 拼 URL，需要的是域名（amazon.com）。
+# 在此统一归一化，未知值回退到默认站点，避免拼出 https://www.us/ 这种坏 URL。
+_COUNTRY_TO_DOMAIN = {
+    "US": "amazon.com", "USA": "amazon.com",
+    "UK": "amazon.co.uk", "GB": "amazon.co.uk",
+    "DE": "amazon.de", "FR": "amazon.fr", "ES": "amazon.es", "IT": "amazon.it",
+    "NL": "amazon.nl", "JP": "amazon.co.jp", "CA": "amazon.ca",
+    "AU": "amazon.com.au", "IN": "amazon.in", "MX": "amazon.com.mx",
+    "BR": "amazon.com.br", "SE": "amazon.se", "PL": "amazon.pl",
+}
+
+
+def _normalize_marketplace(value: str, default: str) -> str:
+    """把 marketplace 归一化成 Amazon 站点域名。
+
+    - 空 → default；已是域名（含 'amazon.'）→ 原样（小写）；
+    - 国家码（US/UK/JP…）→ 映射到对应域名；未知 → default（防坏 URL）。
+    """
+    if not value:
+        return default
+    v = value.strip().lower()
+    if "amazon." in v:
+        return v
+    return _COUNTRY_TO_DOMAIN.get(value.strip().upper(), default)
+
+
 class SearchService:
     def __init__(self, settings: Settings, cache: CacheStore):
         self.settings = settings
@@ -55,7 +82,7 @@ class SearchService:
         platform = req.platform or self.settings.default_platform
         if not registry.has_platform(platform):
             raise RuntimeError(f"不支持的平台：{platform}")
-        marketplace = req.marketplace or self.settings.marketplace
+        marketplace = _normalize_marketplace(req.marketplace, self.settings.marketplace)
         top_n = req.top_n or self.settings.top_n
         key = CacheStore.make_key(platform, req.keyword, marketplace, top_n)
 
