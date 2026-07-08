@@ -116,6 +116,41 @@ class MockSource(DataSource):
             ))
         return products
 
+    async def fetch_product(
+        self, product_id: str, marketplace: str
+    ) -> Product:
+        """按 ASIN 确定性生成单个产品全貌（seed=product_id），再富化详情/评论。"""
+        rng = _seeded_rng("product", product_id, marketplace)
+        brand = rng.choice(_BRANDS)
+        noun = rng.choice(["Wireless Earbuds", "Phone Case", "Backpack",
+                           "Mechanical Keyboard", "USB-C Charger", "Headphones"])
+        price = round(rng.uniform(9.99, 199.99), 2)
+        has_discount = rng.random() < 0.5
+        list_price = round(price * rng.uniform(1.1, 1.6), 2) if has_discount else None
+        discount = round((1 - price / list_price) * 100, 1) if list_price else None
+        badge = rng.choice(_BADGES)
+        is_prime = rng.random() < 0.8
+        product = Product(
+            search_context=SearchContext(keyword=f"asin:{product_id}"),
+            base_info=BaseInfo(
+                product_id=product_id, platform="amazon", brand=brand,
+                title=f"{brand} {noun} Model {rng.randint(100, 999)}",
+                image_url=f"https://m.media-amazon.com/images/I/{product_id}.jpg",
+                product_url=f"https://www.{marketplace}/dp/{product_id}",
+                rating=round(rng.uniform(3.5, 5.0), 1),
+                review_count=rng.randint(20, 45000),
+                badges=[badge] if badge else [],
+                platform_extra={"is_prime": is_prime},
+            ),
+            pricing=Pricing(
+                price=price, list_price=list_price, currency="USD",
+                discount_pct=discount, fast_shipping=is_prime,
+            ),
+        )
+        await self.fetch_detail(product, marketplace)      # 变体/rank/content/logistics
+        product.reviews_sample = await self.fetch_reviews(product_id, marketplace)
+        return product
+
     async def fetch_detail(self, product: Product, marketplace: str) -> None:
         rng = _seeded_rng("detail", product.base_info.product_id)
         product.base_info.parent_id = "B0" + "".join(

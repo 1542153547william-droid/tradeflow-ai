@@ -72,6 +72,30 @@ def search_products(keyword: str, platform: str = "amazon",
 
 
 @tool
+def get_product_by_asin(asin: str, platform: str = "amazon",
+                        marketplace: str = "") -> Dict[str, Any]:
+    """按 ASIN/商品ID 抓单个产品的完整全貌（Listing+变体+评价+评论情感分析）。
+
+    用于 #5 爆款拆解 / #7 选品：输入单个 ASIN，返回该产品的通用分层结构
+    base_info(品牌/标题/评分/评论数/排名)、pricing、logistics、content(卖点/变体)、
+    reviews_sample 及整体评论情感/关键词分析。platform 用 list_platforms 查可选值。"""
+    try:
+        import httpx  # 惰性导入，见文件头说明
+    except ImportError:
+        return {"error": "未安装 httpx，无法调用查询系统。"}
+    params: Dict[str, Any] = {"platform": platform}
+    if marketplace:
+        params["marketplace"] = marketplace
+    try:
+        resp = httpx.get(f"{settings.query_api_url}/api/product/{asin}",
+                         params=params, timeout=_SEARCH_TIMEOUT)
+        resp.raise_for_status()
+        return _compact(resp.json())
+    except httpx.HTTPError as exc:
+        return {"error": f"按 ASIN 查询失败: {type(exc).__name__}: {exc}"}
+
+
+@tool
 def list_platforms() -> Dict[str, Any]:
     """列出查询系统当前支持哪些电商平台（供 search_products 的 platform 取值）。"""
     try:
@@ -86,4 +110,4 @@ def list_platforms() -> Dict[str, Any]:
         return {"error": f"获取平台列表失败: {type(exc).__name__}: {exc}"}
 
 
-AMAZON_TOOLS = [search_products, list_platforms]
+AMAZON_TOOLS = [search_products, get_product_by_asin, list_platforms]

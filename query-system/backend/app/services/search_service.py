@@ -97,6 +97,55 @@ class SearchService:
 
         raise RuntimeError(f"数据抓取失败：{last_err}")
 
+    async def get_product(self, platform: str, product_id: str,
+                          marketplace: str | None = None) -> SearchResult:
+        """按 ASIN 抓单个产品全貌（0.5）：走同一回退链 + 缓存 + 评论分析。
+
+        返回复用 SearchResult（products 只含这一个产品），便于沿用缓存/导出/前端模型。
+        """
+        platform = platform or self.settings.default_platform
+        if not registry.has_platform(platform):
+            raise RuntimeError(f"不支持的平台：{platform}")
+        marketplace = marketplace or self.settings.marketplace
+        key = CacheStore.make_key(platform, f"asin:{product_id}", marketplace, 1)
+
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+
+        last_err: Exception | None = None
+        for name in self._build_chain(platform):
+            source: DataSource | None = None
+            try:
+                source = registry.make_source(platform, name, self.settings)
+                product = await source.fetch_product(product_id, marketplace)
+                if product is None:
+                    raise DataSourceError("数据源不支持按 ASIN 查询")
+                analysis = (analyze_reviews(product.reviews_sample)
+                            if product.reviews_sample else None)
+                result = SearchResult(
+                    keyword=f"asin:{product_id}",
+                    platform=platform,
+                    marketplace=marketplace,
+                    fetched_at=datetime.now(timezone.utc),
+                    source=name,  # type: ignore[arg-type]
+                    products=[product],
+                    review_analysis=analysis,
+                )
+                self.cache.set(key, result)
+                return result
+            except DataSourceError as exc:
+                last_err = exc
+                continue
+            except Exception as exc:
+                last_err = exc
+                continue
+            finally:
+                if source is not None:
+                    await source.close()
+
+        raise RuntimeError(f"按 ASIN 查询失败：{last_err}")
+
     async def _enrich(self, source: DataSource, products: List[Product],
                       marketplace: str, req: SearchRequest) -> None:
         """对前 N 逐个富化。串行执行 —— 无代理时并发抓取极易触发封禁。"""
