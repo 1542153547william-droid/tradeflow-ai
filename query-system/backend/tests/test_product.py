@@ -45,6 +45,12 @@ class TestGetProduct(unittest.TestCase):
         b = asyncio.run(svc.get_product("amazon", "B0UNIT0002", "amazon.com"))
         self.assertEqual(a.products[0].base_info.brand, b.products[0].base_info.brand)
 
+    def test_platform_case_insensitive(self):
+        # 模型常传 "Amazon"（首字母大写）；平台匹配须大小写不敏感，不得 502。
+        svc = _service()
+        result = asyncio.run(svc.get_product("Amazon", "B0UNIT0003", "amazon.com"))
+        self.assertEqual(len(result.products), 1)
+
     def test_unknown_platform_raises(self):
         svc = _service()
         with self.assertRaises(RuntimeError):
