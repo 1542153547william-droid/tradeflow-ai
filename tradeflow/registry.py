@@ -18,10 +18,12 @@ from typing import Dict, List, Sequence, Tuple
 from .agent.loop import Agent
 from .compose import build_named_agent
 from .tools.base import Tool, tool
+from .tools.ads import ADS_TOOLS
 from .tools.compliance import COMPLIANCE_TOOLS
 from .tools.imagery import IMAGERY_TOOLS
 from .tools.listing import LISTING_TOOLS
 from .tools.market import MARKET_TOOLS
+from .tools.monitor import MONITOR_TOOLS
 from .tools.selection import SELECTION_TOOLS
 from .tools.teardown import TEARDOWN_TOOLS
 
@@ -45,12 +47,18 @@ REGISTRY: Dict[str, AgentSpec] = {
     "imagery": AgentSpec(
         "imagery", "#3 图文视频提示词",
         "绘图 prompt + 短视频脚本 + 图片规范校验", tuple(IMAGERY_TOOLS)),
+    "ads": AgentSpec(
+        "ads", "#4 广告优化",
+        "解析广告/结算报表：指标盘面+SKU盈亏线+搜索词三分类+调价否定建议", tuple(ADS_TOOLS)),
     "teardown": AgentSpec(
         "teardown", "#5 爆款拆解",
         "拆竞品 ASIN：Listing/变体/定价/痛点 + 运营模式判定", tuple(TEARDOWN_TOOLS)),
     "market": AgentSpec(
         "market", "#6 市场分析",
         "类目/关键词蓝海红海研判：体量/竞争强度/价格带/风险", tuple(MARKET_TOOLS)),
+    "monitor": AgentSpec(
+        "monitor", "竞品监控",
+        "持续盯竞品：抓价格/评分/评论/排名快照，对比变动并预警", tuple(MONITOR_TOOLS)),
     "selection": AgentSpec(
         "selection", "#7 智能选品",
         "选品决策：多维评分+毛利测算，综合 #1/#5/#6 给风险收益结论",
