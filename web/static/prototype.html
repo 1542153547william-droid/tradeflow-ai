@@ -84,7 +84,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .store-menu .sep{height:1px;background:var(--border);margin:5px 4px}
 .btn{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
   border-radius:9px;padding:7px 13px;font-size:13px;font-weight:500;display:inline-flex;
-  align-items:center;gap:7px;transition:.12s}
+  align-items:center;gap:7px;transition:.12s;white-space:nowrap;flex:0 0 auto}
 .btn svg{width:15px;height:15px}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -99,6 +99,9 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
   background:var(--surface);display:grid;place-items:center;color:var(--dim)}
 .icon-btn svg{width:16px;height:16px}
 .icon-btn:hover{background:var(--surface-2);color:var(--text)}
+.agent-sel{width:auto;max-width:190px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:9px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit}
+.agent-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak);outline:none}
 
 /* ---------- shell ---------- */
 .shell{flex:1;display:flex;min-height:0}
@@ -327,6 +330,7 @@ button.imgbox{font-family:inherit}
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></span>TradeFlow&nbsp;AI</div>
+    <select id="agentSel" class="agent-sel" title="选择智能体（自动路由=按你的话智能判断）"><option value="auto">自动路由</option></select>
     <div class="spacer"></div>
     <div class="store-switch">
       <button class="store-btn" id="storeBtn"><span class="dot"></span><b id="storeName">Aurora Home US</b><span class="mk" id="storeMk">· 美国</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -351,7 +355,7 @@ button.imgbox{font-family:inherit}
         <button class="hist-item">加湿器 Listing 素材生成</button>
         <button class="hist-item">宠物用品选品咨询</button>
       </div>
-      <div class="side-foot">引擎：<b>claude-opus-4-8</b><br><span style="color:var(--good)">● 已连接</span> · Demo 原型</div>
+      <div class="side-foot">引擎：<b>连接中…</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端</div>
     </nav>
 
     <!-- MAIN -->
@@ -378,7 +382,7 @@ button.imgbox{font-family:inherit}
               <textarea id="chatInp" rows="1" placeholder="问我机会商品、某类目机会，或让我生成某个商品的 Listing 素材…"></textarea>
               <button class="send" id="chatSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
             </div>
-            <div class="hint">当前上下文：Aurora Home US · 演示原型，回复为脚本模拟</div>
+            <div class="hint">当前上下文：Aurora Home US · 已接入后端</div>
           </div>
         </div>
       </section>
@@ -670,20 +674,31 @@ button.imgbox{font-family:inherit}
     thinking('思考中…',()=>addAgent(`<div class="bubble"><div>我可以帮你挖机会商品、按类目找蓝海，或为选定商品生成整套 Listing 素材。试试：</div>${chips(['当前有哪些机会商品？','厨房家居类目有什么机会？','帮我生成加湿器的完整 Listing 素材'])}</div>`));
   }
 
-  /* ---- 真后端接线：对话直连 /api/chat（qwen + #1/#2/#3 智能体） ---- */
-  // 轻量意图路由：把请求分到已实现的真智能体（合规/图文/文案），其余走通用。
+  /* ---- 真后端接线：对话直连 /api/chat（qwen + 全部业务智能体） ---- */
+  // 轻量意图路由：把请求分到对应的真智能体，其余走通用。顺序=从具体到宽泛。
   function pickAgent(q){q=(q||'').toLowerCase();
-    if(/(合规|违规|禁词|极限词|审一?下|侵权|能不能用)/.test(q))return 'compliance';
+    if(/(合规|违规|禁词|极限词|审一?下|审核|侵权|能不能用|违禁)/.test(q))return 'compliance';
+    if(/(拆解|拆一下|竞品|对标|爆款|逆向|asin|b0[0-9a-z]{8})/.test(q))return 'teardown';
+    if(/(选品|机会商品|机会|值得做|要不要做|能不能做|挖|蓝海|选个?品)/.test(q))return 'selection';
+    if(/(市场|类目|赛道|红海|竞争格局|体量|价格带|研判|大盘|供需)/.test(q))return 'market';
     if(/(图片|配图|出图|绘图|视频|脚本|构图|主图规范)/.test(q))return 'imagery';
     if(/(listing|素材|标题|五点|文案|描述|search *term|关键词)/.test(q))return 'listing';
     return 'default';}
-  const AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',imagery:'#3 图文提示词'};
+  // 用户可在顶栏手动选智能体；选"自动路由"时才用上面的关键词判断。
+  function chosenAgent(text){const sel=$('#agentSel');const v=sel&&sel.value;
+    return (v&&v!=='auto')?v:pickAgent(text);}
+  // 智能体 key→中文名，初始给默认值，init 时用 /api/agents 覆盖为注册表真实展示名。
+  let AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',
+    imagery:'#3 图文提示词',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
+  // 把当前店铺/站点作为上下文带给后端（仅拼进发送内容，气泡仍只显示用户原话）。
+  function storeContext(){const s=stores.find(x=>x.id===curStore);
+    return s?`【店铺上下文：${s.name} · ${MK[s.mk]}站(${s.mk})】\n`:'';}
   // 极简 markdown → HTML：转义后处理 **粗体**、`代码`、换行。
   function fmt(s){let h=esc(String(s==null?'':s));
     h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>');
     return h.replace(/\n/g,'<br>');}
   async function respondReal(text){
-    const agent=pickAgent(text);
+    const agent=chosenAgent(text);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
@@ -691,7 +706,7 @@ button.imgbox{font-family:inherit}
     let toolsSeen=[];
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent})});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
       if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
       const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
       while(true){
@@ -735,11 +750,22 @@ button.imgbox{font-family:inherit}
   });
   $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;location.reload();};
 
-  /* ---------- module: 机会上新 (receives from chat) ---------- */
-  let opps=[
-    {...OPP.hum,fromChat:false},{...OPP.lamp,fromChat:false},{...OPP.mount,fromChat:false},
-    {...OPP.bamboo,fromChat:false},{...OPP.led,fromChat:false},{...OPP.bottle,fromChat:false},
-  ];
+  /* ---------- module: 机会上新（后端持久化 CRUD，B1） ---------- */
+  let opps=[];
+  const DEFAULT_OPPS=[OPP.hum,OPP.lamp,OPP.mount,OPP.bamboo,OPP.led,OPP.bottle];
+  async function loadOpps(){
+    try{
+      let d=await (await fetch('/api/opportunities')).json();
+      if(!d.items||!d.items.length){                 // 首次：把演示默认项种进后端
+        for(const o of DEFAULT_OPPS)
+          await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({...o,fromChat:false})});
+        d=await (await fetch('/api/opportunities')).json();
+      }
+      opps=d.items||[];
+    }catch(e){opps=DEFAULT_OPPS.map(o=>({...o}));}    // 后端不可用则退回本地展示
+    renderOpps();
+  }
   function renderOpps(){
     const g=$('#oppGrid');g.innerHTML='';$('#oppBadge').textContent=opps.length;
     opps.forEach(o=>{const c=document.createElement('div');c.className='opp';
@@ -747,15 +773,23 @@ button.imgbox{font-family:inherit}
         <div class="body"><h4>${o.name}</h4>
           <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill amber">评分 ${o.score}</span>${o.fromChat?'<span class="pill accent"><span class="d"></span>来自对话</span>':'<span class="pill mute">需求 '+o.demand+'</span>'}</div>
           <div class="metrics"><div>毛利<b>${o.margin}</b></div><div>竞争<b>${o.comp}</b></div><div>侵权<b style="color:var(--good)">低</b></div></div></div>
-        <div class="foot"><button class="btn sm" style="flex:1;justify-content:center">拆解详情</button><button class="btn amber sm edit" style="flex:1;justify-content:center">编辑并上架</button></div>`;
-      c.querySelector('.edit').onclick=()=>openEditor(o);g.appendChild(c);});
+        <div class="foot"><button class="btn amber sm edit" style="flex:1;justify-content:center">编辑并上架</button><button class="btn ghost sm del" title="移除">✕</button></div>`;
+      c.querySelector('.edit').onclick=()=>openEditor(o);
+      const db=c.querySelector('.del');if(db)db.onclick=()=>removeOpp(o.id,o.name);
+      g.appendChild(c);});
   }
-  function addToOpps(k){
-    if(!opps.some(o=>o.key===k&&o.fromChat)) opps.unshift({...OPP[k],fromChat:true});
-    renderOpps();
+  async function removeOpp(id,name){
+    if(!id){toast('该项无 id，无法移除');return;}
+    try{await fetch('/api/opportunities/'+id,{method:'DELETE'});}catch(e){}
+    await loadOpps();toast((name||'机会')+' 已移除');
+  }
+  async function addToOpps(k){
+    try{await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...OPP[k],fromChat:true})});}catch(e){}
+    await loadOpps();
     addAgent(`<div class="bubble"><div><b>${OPP[k].name}</b> 已放入「机会上新」。你可以去那里继续编辑图文、做合规预检并一键上传亚马逊。</div>
       <div class="chips"><button class="chip" id="gotoOpp">前往机会上新 →</button></div></div>`);
-    $('#gotoOpp').onclick=()=>{go('listing');openEditor(opps.find(o=>o.key===k));};
+    $('#gotoOpp').onclick=()=>{go('listing');const it=opps.find(o=>o.key===k);if(it)openEditor(it);};
     toast(OPP[k].name+' 已加入机会上新');
   }
   const imagesByKey={},keywordsByKey={};let editKey=null;
@@ -810,9 +844,30 @@ button.imgbox{font-family:inherit}
     toast('图片已加入商品');
   }
   $('#backOpp').onclick=()=>{$('#oppEditor').style.display='none';$('#oppList').style.display='block';};
-  $('#checkBtn').onclick=()=>{const title=$('#edTitleInp').value.toLowerCase();
-    const forbidden=['best','no.1','no1','#1','100% cure','fda approved','cheapest'];const hits=forbidden.filter(w=>title.includes(w));
-    $('#checkResult').innerHTML=hits.length?`<div class="note" style="background:var(--crit-weak);color:var(--crit)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>合规预检未通过：命中极限词 ${hits.map(h=>'「'+h+'」').join('、')}，请修改后再上传。</div>`:`<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>合规预检通过：未发现极限词 / 侵权风险，可以上传。</div>`;};
+  function renderComplianceResult(d){
+    const box=$('#checkResult');const vio=(d&&d.violations)||[];const cr=d&&d.category_risk;
+    let extra='';
+    if(cr&&cr.matched&&cr.risk_level&&cr.risk_level!=='低')
+      extra=`<div class="note" style="margin-top:10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>类目风险：${esc(cr.risk_level)}${cr.risk_type?' · '+esc(cr.risk_type):''}${cr.note?' — '+esc(cr.note):''}</div>`;
+    if(!vio.length){
+      box.innerHTML=`<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>合规预检通过：未发现极限词 / 侵权风险，可以上传。</div>`+extra;return;}
+    const rows=vio.map(v=>`<li><b>${esc(v['词']||'')}</b>${v['类型']?'（'+esc(v['类型'])+'）':''}${v['合规替代']?' → 建议：'+esc(v['合规替代']):''}</li>`).join('');
+    box.innerHTML=`<div class="note" style="background:var(--crit-weak);color:var(--crit)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg><div>合规预检未通过：命中 ${vio.length} 处违规<ul style="margin:6px 0 0;padding-left:18px">${rows}</ul></div></div>`+extra;
+  }
+  $('#checkBtn').onclick=async()=>{
+    const title=$('#edTitleInp').value;
+    const bullets=[...$('#oppEditor').querySelectorAll('.bullets input')].map(i=>i.value);
+    const descEl=$('#oppEditor').querySelector('textarea');
+    const text=[title,...bullets,descEl?descEl.value:''].filter(Boolean).join('\n');
+    const cat=(editKey&&OPP[editKey])?OPP[editKey].cat:'';
+    const site=((stores.find(x=>x.id===curStore)||{}).mk)||'US';
+    $('#checkResult').innerHTML='<div class="note">正在做合规预检 …</div>';
+    try{
+      const d=await (await fetch('/api/compliance/check',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text,category:cat,site})})).json();
+      renderComplianceResult(d);
+    }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">合规预检失败：'+esc(String(e.message||e))+'</div>';}
+  };
   $('#publishBtn').onclick=()=>{$('#publishBtn').disabled=true;$('#publishBtn').textContent='上传中…';
     setTimeout(()=>{$('#publishBtn').disabled=false;$('#publishBtn').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊';
       $('#checkResult').innerHTML='<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>已提交上架 · Feed <span class="mono" style="color:inherit">feed_90417</span> 处理中，约 15 分钟内生效。</div>';toast('Listing 已提交上架');},1600);};
@@ -913,6 +968,23 @@ button.imgbox{font-family:inherit}
   $('#sendMail').onclick=()=>{const n=selCount();if(!n){toast('请先选择买家');return;}toast('已发送 '+n+' 封跟踪邮件');};
 
   /* ---------- init ---------- */
-  renderStores();renderOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+  renderStores();loadOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+
+  /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
+  (function initBackend(){
+    const sel=$('#agentSel');
+    fetch('/api/agents').then(r=>r.json()).then(list=>{
+      list.forEach(a=>{AGENT_CN[a.key]=a.label;
+        if(sel&&a.key!=='default'){const o=document.createElement('option');
+          o.value=a.key;o.textContent=a.label;o.title=a.desc||'';sel.appendChild(o);}});
+    }).catch(()=>{});
+    fetch('/api/info').then(r=>r.json()).then(d=>{
+      const eng=d.provider==='mock'?'mock（未接真实模型）':(d.provider+' · '+d.model);
+      const foot=$('.side-foot');
+      if(foot)foot.innerHTML='引擎：<b>'+esc(eng)+'</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端';
+      const hint=$('.composer .hint'),s=stores.find(x=>x.id===curStore);
+      if(hint)hint.textContent='当前上下文：'+(s?s.name:'')+' · 已接入后端（'+eng+'）';
+    }).catch(()=>{});
+  })();
 })();
 </script>
