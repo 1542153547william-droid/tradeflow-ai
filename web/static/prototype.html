@@ -398,6 +398,7 @@ button.imgbox{font-family:inherit}
             <button class="icon-btn" id="backOpp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
             <div class="txt"><h2 id="edTitle">Listing 编辑</h2><p>确认内容并做合规预检，通过后即可一键上传。</p></div>
             <div style="display:flex;gap:9px">
+              <button class="btn primary" id="genBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg>AI 生成文案</button>
               <button class="btn" id="checkBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>合规预检</button>
               <button class="btn amber" id="publishBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊</button>
             </div>
@@ -867,6 +868,25 @@ button.imgbox{font-family:inherit}
         body:JSON.stringify({text,category:cat,site})})).json();
       renderComplianceResult(d);
     }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">合规预检失败：'+esc(String(e.message||e))+'</div>';}
+  };
+  // AI 生成文案：调 #2 生成标题/五点/关键词/描述并填入编辑器，附带合规结果（B0）。
+  $('#genBtn').onclick=async()=>{
+    if(!editKey){toast('请先选择商品');return;}
+    const o=OPP[editKey]||{},btn=$('#genBtn'),orig=btn.innerHTML;
+    const site=((stores.find(x=>x.id===curStore)||{}).mk)||'US';
+    btn.disabled=true;btn.textContent='生成中…';
+    $('#checkResult').innerHTML='<div class="note">正在调用 #2 Listing 文案生成素材（含关键词与合规检查），可能需要十几秒 …</div>';
+    try{
+      const d=await (await fetch('/api/listing/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:o.name||editKey,category:o.cat||'',site})})).json();
+      if(d.title)$('#edTitleInp').value=d.title;
+      const bi=$$('#oppEditor .bullets input');(d.bullets||[]).forEach((b,i)=>{if(bi[i])bi[i].value=b;});
+      if(Array.isArray(d.keywords)&&d.keywords.length){keywordsByKey[editKey]=d.keywords.slice();renderEditKw();}
+      const ta=$('#oppEditor textarea');if(ta&&d.description)ta.value=d.description;
+      if(d.compliance)renderComplianceResult(d.compliance);
+      toast(d.model_ok?'已生成 Listing 素材':'已生成（模型未返回规范 JSON，已用兜底文案）');
+    }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">生成失败：'+esc(String(e.message||e))+'</div>';}
+    finally{btn.disabled=false;btn.innerHTML=orig;}
   };
   $('#publishBtn').onclick=()=>{$('#publishBtn').disabled=true;$('#publishBtn').textContent='上传中…';
     setTimeout(()=>{$('#publishBtn').disabled=false;$('#publishBtn').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊';

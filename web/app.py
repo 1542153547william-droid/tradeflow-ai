@@ -31,6 +31,7 @@ from tradeflow.agent.loop import AgentStep  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
+from web.listing_gen import generate_listing  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
@@ -117,6 +118,18 @@ class ComplianceIn(BaseModel):
 @app.post("/api/compliance/check")
 def compliance_check(body: ComplianceIn) -> Dict[str, Any]:
     return compliance_gate.func(body.text, body.category, body.site)
+
+
+# ---- 生成 Listing 素材：#2 文案（JSON 契约）+ 词根库 + 合规，结构化返回（B0） ----
+class ListingGenIn(BaseModel):
+    name: str
+    category: str = ""
+    site: str = "US"
+
+
+@app.post("/api/listing/generate")
+def listing_generate(body: ListingGenIn) -> Dict[str, Any]:
+    return generate_listing(body.name, body.category, body.site)
 
 
 @app.post("/api/chat", response_model=ChatOut)
