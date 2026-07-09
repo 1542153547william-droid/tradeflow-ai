@@ -16,8 +16,12 @@ from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import asyncio  # noqa: E402
+import json  # noqa: E402
+import threading  # noqa: E402
+
 from fastapi import FastAPI  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -98,6 +102,62 @@ def chat(body: ChatIn) -> ChatOut:
         stopped_early=result.stopped_early,
         steps=steps,
     )
+
+
+def _sse(event: Dict[str, Any]) -> str:
+    """把一个事件序列化成一帧 SSE。"""
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(body: ChatIn) -> StreamingResponse:
+    """SSE 流式版对话：边跑边把进度推给前端，避免长任务（抓竞品等）看起来像卡死。
+
+    agent.run 是同步阻塞的（内部还会等爬虫），放线程池跑；每步经 observer 把
+    「正在调用某工具」推成一个事件，跑完再推 final。前端据此实时更新状态而非干等。
+    """
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def observe(step: AgentStep) -> None:
+        # 在工作线程里被调用；线程安全地塞进事件队列。
+        if step.tool_calls:
+            msg = "正在调用工具：" + "、".join(step.tool_calls) + " …"
+        else:
+            msg = "正在整理结果 …"
+        loop.call_soon_threadsafe(
+            queue.put_nowait,
+            {"type": "status", "iteration": step.iteration,
+             "tools": step.tool_calls, "message": msg})
+
+    def run_agent() -> None:
+        try:
+            agent = _build_agent(body.agent, observe)
+            result = agent.run(body.message)
+            loop.call_soon_threadsafe(queue.put_nowait, {
+                "type": "final", "reply": result.output,
+                "iterations": result.iterations,
+                "stopped_early": result.stopped_early})
+        except Exception as exc:  # noqa: BLE001 —— 把错误推给前端而非静默
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "error", "error": f"{type(exc).__name__}: {exc}"})
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
+
+    threading.Thread(target=run_agent, daemon=True).start()
+
+    async def event_gen():
+        # 先推一个"已收到、开始处理"，让前端立刻有反馈。
+        yield _sse({"type": "status", "iteration": 0, "message": "已收到，开始处理 …"})
+        while True:
+            evt = await queue.get()
+            if evt.get("type") == "done":
+                break
+            yield _sse(evt)
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
