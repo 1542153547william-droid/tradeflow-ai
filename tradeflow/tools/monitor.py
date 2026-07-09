@@ -62,6 +62,93 @@ def _key_fields(product: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _profile(product: Dict[str, Any]) -> Dict[str, Any]:
+    """比监控多抽几维（卖点数/图片/视频/变体/差评占比与痛点词），供横向对比。
+
+    情感分析与高频词字段在不同数据源命名可能不同，这里做兜底探测，取不到就留空。"""
+    base = product.get("base_info") or {}
+    content = product.get("content") or {}
+    fields = _key_fields(product)
+    sentiment = (product.get("review_sentiment") or product.get("sentiment")
+                 or base.get("sentiment") or {})
+    neg = _num(sentiment.get("negative") or sentiment.get("负")
+               or sentiment.get("neg"))
+    pain = (product.get("pain_points") or product.get("负面关键词")
+            or sentiment.get("negative_keywords") or content.get("差评关键词") or [])
+    fields.update({
+        "卖点数": _num(content.get("bullet_count")
+                       or len(content.get("bullets") or []) or None),
+        "图片数": _num(content.get("image_count")),
+        "有视频": bool(content.get("has_video")),
+        "变体数": _num(content.get("variant_count")
+                       or len(content.get("variants") or []) or None),
+        "差评占比": neg,
+        "痛点词": list(pain) if isinstance(pain, (list, tuple)) else [pain],
+    })
+    return fields
+
+
+def _best(rows: Dict[str, Dict[str, Any]], field: str, *, high_is_good: bool):
+    """在各竞品里挑该维度的最优 ASIN（None 值跳过）。返回 (asin, 值) 或 None。"""
+    vals = [(a, r[field]) for a, r in rows.items() if isinstance(r.get(field), (int, float))]
+    if not vals:
+        return None
+    return (max if high_is_good else min)(vals, key=lambda x: x[1])
+
+
+def _build_comparison(profiles: Dict[str, Dict[str, Any]],
+                      my_asin: str = "") -> Dict[str, Any]:
+    """多竞品横向对比（纯函数，可离线测）。
+
+    profiles: {asin: _profile(...) 的结果}。my_asin 非空则视为"我方"，标出落后维度。
+    产出：对比表 + 各维度赢家 + （有我方时）我方短板 + 差异化机会（竞品共性痛点）。"""
+    if not profiles:
+        return {"error": "没有可对比的竞品数据"}
+
+    winners = {
+        "最低价": _best(profiles, "价格", high_is_good=False),
+        "最高分": _best(profiles, "评分", high_is_good=True),
+        "评论最多": _best(profiles, "评论数", high_is_good=True),
+        "卖点最全": _best(profiles, "卖点数", high_is_good=True),
+    }
+    winners = {k: {"ASIN": v[0], "值": v[1]} for k, v in winners.items() if v}
+
+    # 差异化机会：所有竞品差评痛点词的共性 = 可主打的改良/攻击点。
+    from collections import Counter
+    pain = Counter()
+    for a, r in profiles.items():
+        if a == my_asin:
+            continue
+        for w in r.get("痛点词") or []:
+            if w:
+                pain[str(w).strip().lower()] += 1
+    opportunities = [{"痛点": w, "出现竞品数": n}
+                     for w, n in pain.most_common(8)]
+
+    result: Dict[str, Any] = {
+        "对比表": profiles,
+        "各维度赢家": winners,
+        "差异化机会": opportunities,
+    }
+
+    if my_asin and my_asin in profiles:
+        me = profiles[my_asin]
+        gaps: List[str] = []
+        for field, high_good, label in [("评分", True, "评分"),
+                                        ("评论数", True, "评论数"),
+                                        ("卖点数", True, "卖点数")]:
+            best = _best(profiles, field, high_is_good=high_good)
+            if best and best[0] != my_asin and isinstance(me.get(field), (int, float)):
+                gaps.append(f"{label}落后：我方 {me[field]} vs 最优 {best[1]}（{best[0]}）")
+        price_best = _best(profiles, "价格", high_is_good=False)
+        if (price_best and isinstance(me.get("价格"), (int, float))
+                and me["价格"] > price_best[1]):
+            gaps.append(f"价格偏高：我方 ${me['价格']} vs 最低 ${price_best[1]}（{price_best[0]}）")
+        result["我方"] = my_asin
+        result["我方短板"] = gaps or ["各维度均不落后"]
+    return result
+
+
 def _snap_files() -> List[Path]:
     if not SNAP_DIR.is_dir():
         return []
@@ -167,9 +254,42 @@ def compare_snapshots() -> Dict[str, Any]:
             **report}
 
 
+@tool
+def compare_competitors(asins: str = "", my_asin: str = "") -> Dict[str, Any]:
+    """多竞品横向对比：拉各 ASIN 档案，比价格/评分/评论/卖点/差评痛点，找差异化机会。
+
+    asins：逗号分隔的竞品 ASIN，留空用监控清单。my_asin：我方产品 ASIN（可选），
+    传了就在对比里标出我方落后的维度。抓取走查询系统，可能较慢。"""
+    ids = [a.strip() for a in asins.split(",") if a.strip()] if asins.strip() else \
+        [r["ASIN"] for r in load_data("monitor", "监控清单.csv", default=[]) if r.get("ASIN")]
+    if my_asin.strip() and my_asin.strip() not in ids:
+        ids.append(my_asin.strip())
+    if len(ids) < 2:
+        return {"error": "至少需要 2 个 ASIN 才能对比（监控清单为空？可直接传 asins）"}
+
+    profiles: Dict[str, Any] = {}
+    errors: List[str] = []
+    for asin in ids:
+        result = get_product_by_asin.func(asin)
+        if "error" in result:
+            errors.append(f"{asin}: {result['error']}")
+            continue
+        products = result.get("products") or [result]
+        if products:
+            profiles[asin] = _profile(products[0])
+    if len(profiles) < 2:
+        return {"error": "抓到的有效竞品不足 2 个", "明细": errors}
+
+    report = _build_comparison(profiles, my_asin.strip())
+    if errors:
+        report["抓取失败"] = errors
+    return report
+
+
 def reset_caches() -> None:
     """测试用。"""
     _rules.cache_clear()
 
 
-MONITOR_TOOLS = [list_watchlist, snapshot_competitors, compare_snapshots]
+MONITOR_TOOLS = [list_watchlist, snapshot_competitors, compare_snapshots,
+                 compare_competitors]

@@ -57,8 +57,8 @@ REGISTRY: Dict[str, AgentSpec] = {
         "market", "#6 市场分析",
         "类目/关键词蓝海红海研判：体量/竞争强度/价格带/风险", tuple(MARKET_TOOLS)),
     "monitor": AgentSpec(
-        "monitor", "竞品监控",
-        "持续盯竞品：抓价格/评分/评论/排名快照，对比变动并预警", tuple(MONITOR_TOOLS)),
+        "monitor", "竞品监控分析",
+        "盯竞品：快照对比预警 + 多竞品横向对比找我方短板与差异化机会", tuple(MONITOR_TOOLS)),
     "selection": AgentSpec(
         "selection", "#7 智能选品",
         "选品决策：多维评分+毛利测算，综合 #1/#5/#6 给风险收益结论",

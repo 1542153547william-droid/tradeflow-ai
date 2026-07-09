@@ -57,12 +57,50 @@ class TestWatchlist(unittest.TestCase):
         self.assertIn("ASIN", out["清单"][0])
 
 
+def _prof(price, rating, reviews, bullets, pains):
+    return {"标题": "t", "品牌": "b", "价格": price, "评分": rating,
+            "评论数": reviews, "排名": "#1", "卖点数": bullets, "图片数": 6,
+            "有视频": True, "变体数": 3, "差评占比": 0.2, "痛点词": pains}
+
+
+class TestCompareCompetitors(unittest.TestCase):
+    def setUp(self):
+        self.profiles = {
+            "COMP1": _prof(29.99, 4.6, 5000, 5, ["not waterproof", "dim light"]),
+            "COMP2": _prof(24.99, 4.2, 800, 4, ["not waterproof", "short battery"]),
+            "MINE": _prof(32.99, 4.3, 300, 5, []),
+        }
+
+    def test_winners(self):
+        out = monitor._build_comparison(self.profiles)
+        self.assertEqual(out["各维度赢家"]["最低价"]["ASIN"], "COMP2")
+        self.assertEqual(out["各维度赢家"]["最高分"]["ASIN"], "COMP1")
+        self.assertEqual(out["各维度赢家"]["评论最多"]["ASIN"], "COMP1")
+
+    def test_shared_pain_is_top_opportunity(self):
+        out = monitor._build_comparison(self.profiles, my_asin="MINE")
+        # "not waterproof" 两个竞品都被骂 → 排第一，且我方痛点不计入
+        self.assertEqual(out["差异化机会"][0]["痛点"], "not waterproof")
+        self.assertEqual(out["差异化机会"][0]["出现竞品数"], 2)
+
+    def test_my_gaps(self):
+        out = monitor._build_comparison(self.profiles, my_asin="MINE")
+        gaps = " ".join(out["我方短板"])
+        self.assertIn("评分落后", gaps)      # 4.3 < 4.6
+        self.assertIn("评论数落后", gaps)    # 300 < 5000
+        self.assertIn("价格偏高", gaps)      # 32.99 > 24.99
+
+    def test_empty(self):
+        self.assertIn("error", monitor._build_comparison({}))
+
+
 class TestRegistered(unittest.TestCase):
     def test_in_registry(self):
         self.assertIn("monitor", registry.REGISTRY)
         names = [t.name for t in monitor.MONITOR_TOOLS]
         self.assertIn("snapshot_competitors", names)
         self.assertIn("compare_snapshots", names)
+        self.assertIn("compare_competitors", names)
 
 
 if __name__ == "__main__":
