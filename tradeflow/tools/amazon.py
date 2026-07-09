@@ -42,6 +42,12 @@ def search_products(keyword: str, platform: str = "amazon", top_n: int = 10,
                     marketplace: str = "", include_reviews: bool = False) -> Dict[str, Any]:
     """按关键词查询指定电商平台的 TOP N 商品（平台无关的通用分层结构）。
 
+    keyword：必须忠实反映用户所指的商品，把中文品名直译成对应英文搜索词
+    （如"哈雷摩托车"→"harley davidson motorcycle"）。**严禁擅自替换成周边/礼品/
+    配件等其它品类**（例如把"哈雷摩托车"偷换成"harley gift"）。若担心该品类在
+    平台可能无货或结果不佳，应先如实告知用户、询问是否改词，而不是自作主张地换。
+    回答时必须明确写出你实际用于搜索的关键词，便于用户核对与纠正。
+
     platform：目标平台（如 'amazon'；用 list_platforms 查可选值）。
     每个商品含通用核心字段：base_info(product_id/品牌/标题/评分/评论数/徽章/rank
     销量排名+类目)、pricing(price/原价/折扣/优惠券/fast_shipping)、logistics(seller/
