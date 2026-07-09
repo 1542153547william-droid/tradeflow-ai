@@ -32,6 +32,7 @@ from tradeflow.factory import build_agent  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
+from web.opp_suggest import suggest_opportunities  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
@@ -130,6 +131,17 @@ class ListingGenIn(BaseModel):
 @app.post("/api/listing/generate")
 def listing_generate(body: ListingGenIn) -> Dict[str, Any]:
     return generate_listing(body.name, body.category, body.site)
+
+
+# ---- 对话选品：结构化机会清单，供前端渲染可「放入机会上新」的卡片（B0） ----
+class OppSuggestIn(BaseModel):
+    query: str
+    top_n: int = 4
+
+
+@app.post("/api/opportunities/suggest")
+def opportunities_suggest(body: OppSuggestIn) -> Dict[str, Any]:
+    return suggest_opportunities(body.query, body.top_n)
 
 
 @app.post("/api/chat", response_model=ChatOut)
