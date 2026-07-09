@@ -685,10 +685,12 @@ button.imgbox{font-family:inherit}
   async function respondReal(text){
     const agent=pickAgent(text);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
-    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
+    const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
-    const setLive=(s)=>{const el=t.querySelector('.live');if(el)el.textContent=s;scrollDown();};
-    let toolsSeen=[];
+    let think=mkThink(), toolsSeen=[], ans=null, streamEl=null, raw='';
+    const setLive=(s)=>{const el=think&&think.querySelector('.live');if(el)el.textContent=s;scrollDown();};
+    // 首个 token 到达时：移除思考气泡，建答案气泡，之后逐字追加（打字机效果）。
+    const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
         headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent})});
@@ -705,18 +707,27 @@ button.imgbox{font-family:inherit}
           if(!line)continue;
           const evt=JSON.parse(line.slice(5).trim());
           if(evt.type==='status'){
-            setLive(AGENT_CN[agent]+' · '+evt.message);
+            if(!ans)setLive(AGENT_CN[agent]+' · '+evt.message);
             if(evt.tools&&evt.tools.length)toolsSeen=toolsSeen.concat(evt.tools);
+          }else if(evt.type==='token'){
+            ensureAns();raw+=evt.text;streamEl.textContent=raw;scrollDown();
+          }else if(evt.type==='reset'){
+            // 工具轮的临时开场白，丢弃、回到"思考中"状态，等真正的答案。
+            if(ans){ans.remove();ans=null;streamEl=null;raw='';}
+            if(!think)think=mkThink();
           }else if(evt.type==='final'){
-            t.remove();
+            const full=evt.reply||raw;
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
-            addAgent('<div class="bubble"><div>'+fmt(evt.reply)+'</div>'+badge+'</div>');
+            if(ans){ans.querySelector('.bubble').innerHTML='<div>'+fmt(full)+'</div>'+badge;}
+            else{if(think)think.remove();addAgent('<div class="bubble"><div>'+fmt(full)+'</div>'+badge+'</div>');}
+            scrollDown();
           }else if(evt.type==='error'){
-            t.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');
+            if(ans)ans.querySelector('.bubble').innerHTML='<div>⚠️ 出错：'+esc(evt.error)+'</div>';
+            else{if(think)think.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');}
           }
         }
       }
-    }catch(e){t.remove();
+    }catch(e){if(think)think.remove();
       addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))+'。请确认服务在 8000 端口运行。</div></div>');}
   }
   /* input handling */

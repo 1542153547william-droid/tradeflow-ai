@@ -113,36 +113,34 @@ def _sse(event: Dict[str, Any]) -> str:
 async def chat_stream(body: ChatIn) -> StreamingResponse:
     """SSE 流式版对话：边跑边把进度推给前端，避免长任务（抓竞品等）看起来像卡死。
 
-    agent.run 是同步阻塞的（内部还会等爬虫），放线程池跑；每步经 observer 把
-    「正在调用某工具」推成一个事件，跑完再推 final。前端据此实时更新状态而非干等。
+    agent.run_stream 逐事件产出：("tools",…) 本轮要调的工具、("token",…) 最终答案的
+    token 增量、("final",…) 结束。整个循环同步阻塞（内部还等爬虫），放线程里跑，
+    通过线程安全队列把事件转成 SSE。前端据此：抓取时显示"正在调用…"、答案逐字蹦出。
     """
     loop = asyncio.get_event_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
-    def observe(step: AgentStep) -> None:
-        # 在工作线程里被调用；线程安全地塞进事件队列。
-        if step.tool_calls:
-            msg = "正在调用工具：" + "、".join(step.tool_calls) + " …"
-        else:
-            msg = "正在整理结果 …"
-        loop.call_soon_threadsafe(
-            queue.put_nowait,
-            {"type": "status", "iteration": step.iteration,
-             "tools": step.tool_calls, "message": msg})
+    def push(evt: Dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, evt)
 
     def run_agent() -> None:
         try:
-            agent = _build_agent(body.agent, observe)
-            result = agent.run(body.message)
-            loop.call_soon_threadsafe(queue.put_nowait, {
-                "type": "final", "reply": result.output,
-                "iterations": result.iterations,
-                "stopped_early": result.stopped_early})
+            agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
+            for kind, payload in agent.run_stream(body.message):
+                if kind == "token":
+                    push({"type": "token", "text": payload})
+                elif kind == "reset":
+                    push({"type": "reset"})
+                elif kind == "tools":
+                    push({"type": "status", "tools": payload,
+                          "message": "正在调用工具：" + "、".join(payload) + " …"})
+                elif kind == "final":
+                    push({"type": "final", "reply": payload.output,
+                          "iterations": payload.iterations,
+                          "stopped_early": payload.stopped_early})
         except Exception as exc:  # noqa: BLE001 —— 把错误推给前端而非静默
-            loop.call_soon_threadsafe(
-                queue.put_nowait,
-                {"type": "error", "error": f"{type(exc).__name__}: {exc}"})
-        loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
+            push({"type": "error", "error": f"{type(exc).__name__}: {exc}"})
+        push({"type": "done"})
 
     threading.Thread(target=run_agent, daemon=True).start()
 
