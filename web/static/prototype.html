@@ -84,7 +84,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .store-menu .sep{height:1px;background:var(--border);margin:5px 4px}
 .btn{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
   border-radius:9px;padding:7px 13px;font-size:13px;font-weight:500;display:inline-flex;
-  align-items:center;gap:7px;transition:.12s}
+  align-items:center;gap:7px;transition:.12s;white-space:nowrap;flex:0 0 auto}
 .btn svg{width:15px;height:15px}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -99,6 +99,9 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
   background:var(--surface);display:grid;place-items:center;color:var(--dim)}
 .icon-btn svg{width:16px;height:16px}
 .icon-btn:hover{background:var(--surface-2);color:var(--text)}
+.agent-sel{width:auto;max-width:190px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:9px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit}
+.agent-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak);outline:none}
 
 /* ---------- shell ---------- */
 .shell{flex:1;display:flex;min-height:0}
@@ -327,6 +330,7 @@ button.imgbox{font-family:inherit}
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></span>TradeFlow&nbsp;AI</div>
+    <select id="agentSel" class="agent-sel" title="选择智能体（自动路由=按你的话智能判断）"><option value="auto">自动路由</option></select>
     <div class="spacer"></div>
     <div class="store-switch">
       <button class="store-btn" id="storeBtn"><span class="dot"></span><b id="storeName">Aurora Home US</b><span class="mk" id="storeMk">· 美国</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -351,7 +355,7 @@ button.imgbox{font-family:inherit}
         <button class="hist-item">加湿器 Listing 素材生成</button>
         <button class="hist-item">宠物用品选品咨询</button>
       </div>
-      <div class="side-foot">引擎：<b>claude-opus-4-8</b><br><span style="color:var(--good)">● 已连接</span> · Demo 原型</div>
+      <div class="side-foot">引擎：<b>连接中…</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端</div>
     </nav>
 
     <!-- MAIN -->
@@ -378,7 +382,7 @@ button.imgbox{font-family:inherit}
               <textarea id="chatInp" rows="1" placeholder="问我机会商品、某类目机会，或让我生成某个商品的 Listing 素材…"></textarea>
               <button class="send" id="chatSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
             </div>
-            <div class="hint">当前上下文：Aurora Home US · 演示原型，回复为脚本模拟</div>
+            <div class="hint">当前上下文：Aurora Home US · 已接入后端</div>
           </div>
         </div>
       </section>
@@ -394,6 +398,7 @@ button.imgbox{font-family:inherit}
             <button class="icon-btn" id="backOpp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
             <div class="txt"><h2 id="edTitle">Listing 编辑</h2><p>确认内容并做合规预检，通过后即可一键上传。</p></div>
             <div style="display:flex;gap:9px">
+              <button class="btn primary" id="genBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg>AI 生成文案</button>
               <button class="btn" id="checkBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>合规预检</button>
               <button class="btn amber" id="publishBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊</button>
             </div>
@@ -589,10 +594,14 @@ button.imgbox{font-family:inherit}
       desc:'Breathe easier, sleep deeper. The Aurora 4L cool mist humidifier keeps your bedroom air comfortable all night with whisper-quiet 26dB operation and a 30-hour runtime on a single fill.',
       kw:['cool mist humidifier','quiet humidifier','bedroom humidifier','baby humidifier','humidifier for large room']},
   };
-  function listingFor(k){return LISTING[k]||{title:OPP[k].name+', Premium Quality for Everyday Use',
+  function listingFor(k,name,cat){
+    if(LISTING[k])return LISTING[k];
+    const nm=name||(OPP[k]&&OPP[k].name)||k||'Product';
+    const ct=cat||(OPP[k]&&OPP[k].cat)||'';
+    return {title:nm+', Premium Quality for Everyday Use',
     bullets:['【核心卖点】突出该品类第一诉求，覆盖主搜索词','【差异化】对比竞品的改良点，回应差评痛点','【场景】明确使用场景与适用人群','【材质/规格】关键参数，降低退货率','【安心保障】质保 / 售后承诺'],
-    desc:'High-quality '+OPP[k].name+' designed to solve real customer pain points, with keyword-rich copy ready for Amazon.',
-    kw:[OPP[k].name.toLowerCase(),'best seller alternative','gift idea','durable '+OPP[k].cat]};}
+    desc:'High-quality '+nm+' designed to solve real customer pain points, with keyword-rich copy ready for Amazon.',
+    kw:[String(nm).toLowerCase(),'best seller alternative','gift idea','durable '+ct]};}
 
   let selected=null, started=false;
   const AV_A='<div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></div>';
@@ -670,20 +679,31 @@ button.imgbox{font-family:inherit}
     thinking('思考中…',()=>addAgent(`<div class="bubble"><div>我可以帮你挖机会商品、按类目找蓝海，或为选定商品生成整套 Listing 素材。试试：</div>${chips(['当前有哪些机会商品？','厨房家居类目有什么机会？','帮我生成加湿器的完整 Listing 素材'])}</div>`));
   }
 
-  /* ---- 真后端接线：对话直连 /api/chat（qwen + #1/#2/#3 智能体） ---- */
-  // 轻量意图路由：把请求分到已实现的真智能体（合规/图文/文案），其余走通用。
+  /* ---- 真后端接线：对话直连 /api/chat（qwen + 全部业务智能体） ---- */
+  // 轻量意图路由：把请求分到对应的真智能体，其余走通用。顺序=从具体到宽泛。
   function pickAgent(q){q=(q||'').toLowerCase();
-    if(/(合规|违规|禁词|极限词|审一?下|侵权|能不能用)/.test(q))return 'compliance';
+    if(/(合规|违规|禁词|极限词|审一?下|审核|侵权|能不能用|违禁)/.test(q))return 'compliance';
+    if(/(拆解|拆一下|竞品|对标|爆款|逆向|asin|b0[0-9a-z]{8})/.test(q))return 'teardown';
+    if(/(选品|机会商品|机会|值得做|要不要做|能不能做|挖|蓝海|选个?品)/.test(q))return 'selection';
+    if(/(市场|类目|赛道|红海|竞争格局|体量|价格带|研判|大盘|供需)/.test(q))return 'market';
     if(/(图片|配图|出图|绘图|视频|脚本|构图|主图规范)/.test(q))return 'imagery';
     if(/(listing|素材|标题|五点|文案|描述|search *term|关键词)/.test(q))return 'listing';
     return 'default';}
-  const AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',imagery:'#3 图文提示词'};
+  // 用户可在顶栏手动选智能体；选"自动路由"时才用上面的关键词判断。
+  function chosenAgent(text){const sel=$('#agentSel');const v=sel&&sel.value;
+    return (v&&v!=='auto')?v:pickAgent(text);}
+  // 智能体 key→中文名，初始给默认值，init 时用 /api/agents 覆盖为注册表真实展示名。
+  let AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',
+    imagery:'#3 图文提示词',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
+  // 把当前店铺/站点作为上下文带给后端（仅拼进发送内容，气泡仍只显示用户原话）。
+  function storeContext(){const s=stores.find(x=>x.id===curStore);
+    return s?`【店铺上下文：${s.name} · ${MK[s.mk]}站(${s.mk})】\n`:'';}
   // 极简 markdown → HTML：转义后处理 **粗体**、`代码`、换行。
   function fmt(s){let h=esc(String(s==null?'':s));
     h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>');
     return h.replace(/\n/g,'<br>');}
   async function respondReal(text){
-    const agent=pickAgent(text);
+    const agent=chosenAgent(text);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
@@ -693,7 +713,7 @@ button.imgbox{font-family:inherit}
     const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent})});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
       if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
       const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
       while(true){
@@ -730,8 +750,46 @@ button.imgbox{font-family:inherit}
     }catch(e){if(think)think.remove();
       addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))+'。请确认服务在 8000 端口运行。</div></div>');}
   }
+  /* ---- 选品：调结构化接口出可「放入机会上新」的机会卡（B0） ---- */
+  let lastSuggest=[];
+  function suggestCard(items){
+    const rows=items.map((o,i)=>`<div class="opp-row">
+      <div class="cv" style="background:${COVER[i%COVER.length]}">${esc(String(o.name||'').split(' ').slice(0,2).join(' '))}</div>
+      <div class="in"><b>${esc(o.name||'')}</b>
+        <div class="mt"><span>毛利 <b>${esc(o.margin||'-')}</b></span><span>需求 <b>${esc(o.demand||'-')}</b></span><span>竞争 <b>${esc(o.comp||'-')}</b></span></div>
+        ${o.reason?`<div style="font-size:11.5px;color:var(--dim);margin-top:3px">${esc(o.reason)}</div>`:''}</div>
+      <span class="pill amber">评分 ${esc(String(o.score==null?'-':o.score))}</span>
+      <button class="btn primary sm suggPick" data-i="${i}">放入机会上新</button></div>`).join('');
+    return `<div class="bubble"><div>为你研判出 ${items.length} 个机会商品（AI 研判，暂未接实时竞品数据）：</div>
+      <div class="rc" style="margin-top:10px"><div class="rc-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5s5 1 5 6-4 8-4 8"/></svg>机会商品 · 选品研判</div>${rows}</div>
+      ${chips(['换一批看看','厨房家居类目有什么机会？'])}</div>`;
+  }
+  async function respondSelection(text){
+    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span><span class="live">#7 智能选品 · 研判机会商品 …</span></div></div>');
+    try{
+      const d=await (await fetch('/api/opportunities/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query:storeContext()+text})})).json();
+      t.remove();
+      lastSuggest=(d&&d.items)||[];
+      if(!lastSuggest.length){addAgent('<div class="bubble"><div>这次没研判出明确机会，换个类目 / 关键词再试试？</div></div>');return;}
+      addAgent(suggestCard(lastSuggest));
+    }catch(e){t.remove();addAgent('<div class="bubble"><div>⚠️ 选品失败：'+esc(String(e.message||e))+'</div></div>');}
+  }
+  async function addSuggestToOpps(i){
+    const it=lastSuggest[i];if(!it)return;
+    const key='sug_'+String(it.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,28);
+    try{await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...it,key,cover:COVER[i%COVER.length],fromChat:true})});}catch(e){}
+    await loadOpps();
+    addAgent(`<div class="bubble"><div><b>${esc(it.name)}</b> 已放入「机会上新」。去那里点「编辑并上架」→「AI 生成文案」即可出整套素材。</div>
+      <div class="chips"><button class="chip" id="gotoOpp2">前往机会上新 →</button></div></div>`);
+    const g=$('#gotoOpp2');if(g)g.onclick=()=>{go('listing');const o=opps.find(x=>x.key===key);if(o)openEditor(o);};
+    toast(String(it.name)+' 已加入机会上新');
+  }
+
   /* input handling */
-  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();respondReal(text.trim());}
+  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();
+    if(chosenAgent(text)==='selection')respondSelection(text.trim());else respondReal(text.trim());}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
@@ -741,16 +799,28 @@ button.imgbox{font-family:inherit}
     const q=e.target.closest('[data-q]');if(q){submitInput(q.dataset.q);return;}
     const pick=e.target.closest('.pick');if(pick){selected=pick.dataset.k;submitInput('就做「'+OPP[pick.dataset.k].name+'」，帮我生成完整 Listing 素材');return;}
     const add=e.target.closest('.addOpp');if(add){addToOpps(add.dataset.k);return;}
+    const sp=e.target.closest('.suggPick');if(sp){addSuggestToOpps(+sp.dataset.i);return;}
     const ai=e.target.closest('.addImg');if(ai){addImgFromChat(ai.dataset.k,decodeURIComponent(ai.dataset.bg),ai.dataset.role);return;}
     const gi=e.target.closest('.gotoImg');if(gi){go('listing');openEditor(opps.find(o=>o.key===gi.dataset.k)||{...OPP[gi.dataset.k]});return;}
   });
   $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;location.reload();};
 
-  /* ---------- module: 机会上新 (receives from chat) ---------- */
-  let opps=[
-    {...OPP.hum,fromChat:false},{...OPP.lamp,fromChat:false},{...OPP.mount,fromChat:false},
-    {...OPP.bamboo,fromChat:false},{...OPP.led,fromChat:false},{...OPP.bottle,fromChat:false},
-  ];
+  /* ---------- module: 机会上新（后端持久化 CRUD，B1） ---------- */
+  let opps=[];
+  const DEFAULT_OPPS=[OPP.hum,OPP.lamp,OPP.mount,OPP.bamboo,OPP.led,OPP.bottle];
+  async function loadOpps(){
+    try{
+      let d=await (await fetch('/api/opportunities')).json();
+      if(!d.items||!d.items.length){                 // 首次：把演示默认项种进后端
+        for(const o of DEFAULT_OPPS)
+          await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({...o,fromChat:false})});
+        d=await (await fetch('/api/opportunities')).json();
+      }
+      opps=d.items||[];
+    }catch(e){opps=DEFAULT_OPPS.map(o=>({...o}));}    // 后端不可用则退回本地展示
+    renderOpps();
+  }
   function renderOpps(){
     const g=$('#oppGrid');g.innerHTML='';$('#oppBadge').textContent=opps.length;
     opps.forEach(o=>{const c=document.createElement('div');c.className='opp';
@@ -758,30 +828,38 @@ button.imgbox{font-family:inherit}
         <div class="body"><h4>${o.name}</h4>
           <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill amber">评分 ${o.score}</span>${o.fromChat?'<span class="pill accent"><span class="d"></span>来自对话</span>':'<span class="pill mute">需求 '+o.demand+'</span>'}</div>
           <div class="metrics"><div>毛利<b>${o.margin}</b></div><div>竞争<b>${o.comp}</b></div><div>侵权<b style="color:var(--good)">低</b></div></div></div>
-        <div class="foot"><button class="btn sm" style="flex:1;justify-content:center">拆解详情</button><button class="btn amber sm edit" style="flex:1;justify-content:center">编辑并上架</button></div>`;
-      c.querySelector('.edit').onclick=()=>openEditor(o);g.appendChild(c);});
+        <div class="foot"><button class="btn amber sm edit" style="flex:1;justify-content:center">编辑并上架</button><button class="btn ghost sm del" title="移除">✕</button></div>`;
+      c.querySelector('.edit').onclick=()=>openEditor(o);
+      const db=c.querySelector('.del');if(db)db.onclick=()=>removeOpp(o.id,o.name);
+      g.appendChild(c);});
   }
-  function addToOpps(k){
-    if(!opps.some(o=>o.key===k&&o.fromChat)) opps.unshift({...OPP[k],fromChat:true});
-    renderOpps();
+  async function removeOpp(id,name){
+    if(!id){toast('该项无 id，无法移除');return;}
+    try{await fetch('/api/opportunities/'+id,{method:'DELETE'});}catch(e){}
+    await loadOpps();toast((name||'机会')+' 已移除');
+  }
+  async function addToOpps(k){
+    try{await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...OPP[k],fromChat:true})});}catch(e){}
+    await loadOpps();
     addAgent(`<div class="bubble"><div><b>${OPP[k].name}</b> 已放入「机会上新」。你可以去那里继续编辑图文、做合规预检并一键上传亚马逊。</div>
       <div class="chips"><button class="chip" id="gotoOpp">前往机会上新 →</button></div></div>`);
-    $('#gotoOpp').onclick=()=>{go('listing');openEditor(opps.find(o=>o.key===k));};
+    $('#gotoOpp').onclick=()=>{go('listing');const it=opps.find(o=>o.key===k);if(it)openEditor(it);};
     toast(OPP[k].name+' 已加入机会上新');
   }
-  const imagesByKey={},keywordsByKey={};let editKey=null;
+  const imagesByKey={},keywordsByKey={};let editKey=null,editItem=null;
   function defImgs(){return [
     {role:'主图',bg:'linear-gradient(135deg,#0d8a80,#12a89b)',label:'白底产品图'},
     {role:'细节',bg:'linear-gradient(135deg,#c9791b,#e0954a)',label:'场景图'},
     {role:'细节',bg:'linear-gradient(135deg,#3d6e8c,#5a90b0)',label:'特写图'},
     {role:'细节',bg:'linear-gradient(135deg,#7a5aa8,#9878c4)',label:'尺寸图'}];}
   function openEditor(o){
-    editKey=o.key;
-    if(!imagesByKey[o.key]) imagesByKey[o.key]=defImgs();
-    if(!keywordsByKey[o.key]) keywordsByKey[o.key]=(listingFor(o.key).kw||[]).map(x=>typeof x==='string'?x:(x.term||''));
+    editKey=o.key||o.id;editItem=o;
+    if(!imagesByKey[editKey]) imagesByKey[editKey]=defImgs();
+    if(!keywordsByKey[editKey]) keywordsByKey[editKey]=(listingFor(editKey,o.name,o.cat).kw||[]).map(x=>typeof x==='string'?x:(x.term||''));
     $('#oppList').style.display='none';$('#oppEditor').style.display='block';
     $('#edTitle').textContent=o.name+' · Listing 编辑';
-    $('#edTitleInp').value=listingFor(o.key).title;$('#checkResult').innerHTML='';
+    $('#edTitleInp').value=listingFor(editKey,o.name,o.cat).title;$('#checkResult').innerHTML='';
     renderEditImgs();renderEditKw();$('.main').scrollTop=0;
   }
   function renderEditImgs(){
@@ -792,7 +870,7 @@ button.imgbox{font-family:inherit}
     box.querySelectorAll('.imgdel').forEach(b=>b.onclick=()=>{arr.splice(+b.dataset.i,1);renderEditImgs();});
     box.querySelector('.upload input').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
       r.onload=()=>{arr.push({role:'上传',url:r.result,label:f.name});renderEditImgs();toast('图片已添加');};r.readAsDataURL(f);};
-    box.querySelector('.aigen').onclick=()=>{selected=editKey;go('chat');submitInput('帮「'+OPP[editKey].name+'」生成一张商品配图');};
+    box.querySelector('.aigen').onclick=()=>{selected=editKey;go('chat');submitInput('帮「'+((editItem&&editItem.name)||editKey)+'」生成一张商品配图');};
   }
   function renderEditKw(){
     const box=$('#edKw');if(!box||!editKey)return;const arr=keywordsByKey[editKey]||[];
@@ -821,9 +899,49 @@ button.imgbox{font-family:inherit}
     toast('图片已加入商品');
   }
   $('#backOpp').onclick=()=>{$('#oppEditor').style.display='none';$('#oppList').style.display='block';};
-  $('#checkBtn').onclick=()=>{const title=$('#edTitleInp').value.toLowerCase();
-    const forbidden=['best','no.1','no1','#1','100% cure','fda approved','cheapest'];const hits=forbidden.filter(w=>title.includes(w));
-    $('#checkResult').innerHTML=hits.length?`<div class="note" style="background:var(--crit-weak);color:var(--crit)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>合规预检未通过：命中极限词 ${hits.map(h=>'「'+h+'」').join('、')}，请修改后再上传。</div>`:`<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>合规预检通过：未发现极限词 / 侵权风险，可以上传。</div>`;};
+  function renderComplianceResult(d){
+    const box=$('#checkResult');const vio=(d&&d.violations)||[];const cr=d&&d.category_risk;
+    let extra='';
+    if(cr&&cr.matched&&cr.risk_level&&cr.risk_level!=='低')
+      extra=`<div class="note" style="margin-top:10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>类目风险：${esc(cr.risk_level)}${cr.risk_type?' · '+esc(cr.risk_type):''}${cr.note?' — '+esc(cr.note):''}</div>`;
+    if(!vio.length){
+      box.innerHTML=`<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>合规预检通过：未发现极限词 / 侵权风险，可以上传。</div>`+extra;return;}
+    const rows=vio.map(v=>`<li><b>${esc(v['词']||'')}</b>${v['类型']?'（'+esc(v['类型'])+'）':''}${v['合规替代']?' → 建议：'+esc(v['合规替代']):''}</li>`).join('');
+    box.innerHTML=`<div class="note" style="background:var(--crit-weak);color:var(--crit)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg><div>合规预检未通过：命中 ${vio.length} 处违规<ul style="margin:6px 0 0;padding-left:18px">${rows}</ul></div></div>`+extra;
+  }
+  $('#checkBtn').onclick=async()=>{
+    const title=$('#edTitleInp').value;
+    const bullets=[...$('#oppEditor').querySelectorAll('.bullets input')].map(i=>i.value);
+    const descEl=$('#oppEditor').querySelector('textarea');
+    const text=[title,...bullets,descEl?descEl.value:''].filter(Boolean).join('\n');
+    const cat=editItem?editItem.cat:((editKey&&OPP[editKey])?OPP[editKey].cat:'');
+    const site=((stores.find(x=>x.id===curStore)||{}).mk)||'US';
+    $('#checkResult').innerHTML='<div class="note">正在做合规预检 …</div>';
+    try{
+      const d=await (await fetch('/api/compliance/check',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text,category:cat,site})})).json();
+      renderComplianceResult(d);
+    }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">合规预检失败：'+esc(String(e.message||e))+'</div>';}
+  };
+  // AI 生成文案：调 #2 生成标题/五点/关键词/描述并填入编辑器，附带合规结果（B0）。
+  $('#genBtn').onclick=async()=>{
+    if(!editKey){toast('请先选择商品');return;}
+    const o=editItem||OPP[editKey]||{},btn=$('#genBtn'),orig=btn.innerHTML;
+    const site=((stores.find(x=>x.id===curStore)||{}).mk)||'US';
+    btn.disabled=true;btn.textContent='生成中…';
+    $('#checkResult').innerHTML='<div class="note">正在调用 #2 Listing 文案生成素材（含关键词与合规检查），可能需要十几秒 …</div>';
+    try{
+      const d=await (await fetch('/api/listing/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:o.name||editKey,category:o.cat||'',site})})).json();
+      if(d.title)$('#edTitleInp').value=d.title;
+      const bi=$$('#oppEditor .bullets input');(d.bullets||[]).forEach((b,i)=>{if(bi[i])bi[i].value=b;});
+      if(Array.isArray(d.keywords)&&d.keywords.length){keywordsByKey[editKey]=d.keywords.slice();renderEditKw();}
+      const ta=$('#oppEditor textarea');if(ta&&d.description)ta.value=d.description;
+      if(d.compliance)renderComplianceResult(d.compliance);
+      toast(d.model_ok?'已生成 Listing 素材':'已生成（模型未返回规范 JSON，已用兜底文案）');
+    }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">生成失败：'+esc(String(e.message||e))+'</div>';}
+    finally{btn.disabled=false;btn.innerHTML=orig;}
+  };
   $('#publishBtn').onclick=()=>{$('#publishBtn').disabled=true;$('#publishBtn').textContent='上传中…';
     setTimeout(()=>{$('#publishBtn').disabled=false;$('#publishBtn').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊';
       $('#checkResult').innerHTML='<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>已提交上架 · Feed <span class="mono" style="color:inherit">feed_90417</span> 处理中，约 15 分钟内生效。</div>';toast('Listing 已提交上架');},1600);};
@@ -924,6 +1042,23 @@ button.imgbox{font-family:inherit}
   $('#sendMail').onclick=()=>{const n=selCount();if(!n){toast('请先选择买家');return;}toast('已发送 '+n+' 封跟踪邮件');};
 
   /* ---------- init ---------- */
-  renderStores();renderOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+  renderStores();loadOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+
+  /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
+  (function initBackend(){
+    const sel=$('#agentSel');
+    fetch('/api/agents').then(r=>r.json()).then(list=>{
+      list.forEach(a=>{AGENT_CN[a.key]=a.label;
+        if(sel&&a.key!=='default'){const o=document.createElement('option');
+          o.value=a.key;o.textContent=a.label;o.title=a.desc||'';sel.appendChild(o);}});
+    }).catch(()=>{});
+    fetch('/api/info').then(r=>r.json()).then(d=>{
+      const eng=d.provider==='mock'?'mock（未接真实模型）':(d.provider+' · '+d.model);
+      const foot=$('.side-foot');
+      if(foot)foot.innerHTML='引擎：<b>'+esc(eng)+'</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端';
+      const hint=$('.composer .hint'),s=stores.find(x=>x.id===curStore);
+      if(hint)hint.textContent='当前上下文：'+(s?s.name:'')+' · 已接入后端（'+eng+'）';
+    }).catch(()=>{});
+  })();
 })();
 </script>

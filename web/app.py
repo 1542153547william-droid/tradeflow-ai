@@ -29,6 +29,10 @@ from config.settings import settings  # noqa: E402
 from tradeflow import registry  # noqa: E402
 from tradeflow.agent.loop import AgentStep  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
+from tradeflow.tools.compliance import compliance_gate  # noqa: E402
+from web import store  # noqa: E402
+from web.listing_gen import generate_listing  # noqa: E402
+from web.opp_suggest import suggest_opportunities  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
@@ -62,6 +66,13 @@ class ChatOut(BaseModel):
 
 @app.get("/")
 def index() -> FileResponse:
+    # 新的完整产品原型页（对话已接后端；机会上新等模块仍在接入中）。
+    return FileResponse(STATIC / "prototype.html")
+
+
+@app.get("/classic")
+def classic() -> FileResponse:
+    # 旧的极简聊天页，保留作为纯净的智能体联调入口。
     return FileResponse(STATIC / "index.html")
 
 
@@ -79,6 +90,58 @@ def info() -> Dict[str, str]:
 @app.get("/api/agents")
 def agents() -> List[Dict[str, str]]:
     return _agent_list()
+
+
+# ---- 机会上新：真实持久化的 CRUD（B1） ----
+@app.get("/api/opportunities")
+def list_opportunities() -> Dict[str, Any]:
+    return {"items": store.list_opps()}
+
+
+@app.post("/api/opportunities")
+def create_opportunity(body: Dict[str, Any]) -> Dict[str, Any]:
+    # 入参是前端传的机会对象（name/cat/score/margin/…），存储层负责补 id/时间/去重。
+    return store.add_opp(body)
+
+
+@app.delete("/api/opportunities/{opp_id}")
+def remove_opportunity(opp_id: str) -> Dict[str, bool]:
+    return {"ok": store.delete_opp(opp_id)}
+
+
+# ---- 合规预检：直接调 #1 合规的确定性工具，返回结构化结果（B1，无需过模型） ----
+class ComplianceIn(BaseModel):
+    text: str = ""
+    category: str = ""
+    site: str = "US"
+
+
+@app.post("/api/compliance/check")
+def compliance_check(body: ComplianceIn) -> Dict[str, Any]:
+    return compliance_gate.func(body.text, body.category, body.site)
+
+
+# ---- 生成 Listing 素材：#2 文案（JSON 契约）+ 词根库 + 合规，结构化返回（B0） ----
+class ListingGenIn(BaseModel):
+    name: str
+    category: str = ""
+    site: str = "US"
+
+
+@app.post("/api/listing/generate")
+def listing_generate(body: ListingGenIn) -> Dict[str, Any]:
+    return generate_listing(body.name, body.category, body.site)
+
+
+# ---- 对话选品：结构化机会清单，供前端渲染可「放入机会上新」的卡片（B0） ----
+class OppSuggestIn(BaseModel):
+    query: str
+    top_n: int = 4
+
+
+@app.post("/api/opportunities/suggest")
+def opportunities_suggest(body: OppSuggestIn) -> Dict[str, Any]:
+    return suggest_opportunities(body.query, body.top_n)
 
 
 @app.post("/api/chat", response_model=ChatOut)

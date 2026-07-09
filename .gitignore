@@ -8,6 +8,9 @@ venv/
 .DS_Store
 data/*.local.*
 
+# web 层运行时产物（机会上新持久化）
+web/_store/
+
 # query-system (Amazon 查询系统) 本地产物
 cache.db
 *.sqlite3

@@ -61,7 +61,7 @@ def build_agent(
     system_prompt: str = BASE_SYSTEM_PROMPT,
     tools: Optional[List[Tool]] = None,
     provider: Optional[LLMProvider] = None,
-    max_iterations: int = 10,
+    max_iterations: int = 20,
     observer=None,
 ) -> Agent:
     registry = ToolRegistry(tools if tools is not None else list(BUILTIN_TOOLS))
