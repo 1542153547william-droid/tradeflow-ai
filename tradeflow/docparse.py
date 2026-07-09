@@ -60,6 +60,8 @@ def parse_file(path) -> ParsedDoc:
         return _read_pdf(p)
     if ext == ".docx":
         return _read_docx(p)
+    if ext == ".doc":
+        return _read_doc(p)
     if ext == ".pptx":
         return _read_pptx(p)
     raise ParseError(
@@ -81,8 +83,18 @@ def _read_text(p: Path) -> ParsedDoc:
 # --- tables (csv / xlsx) ---------------------------------------------------
 
 def _read_csv(p: Path) -> ParsedDoc:
-    with p.open(encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.reader(f))
+    # Windows/Excel 导出的中文 CSV 多为 GBK/GB18030，纯英文多为 UTF-8（带或不带
+    # BOM）。逐个尝试，latin-1 兜底（永不抛错，最坏是乱码但不崩）。
+    import io
+    raw = p.read_bytes()
+    text = None
+    for enc in ("utf-8-sig", "gb18030", "utf-8", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    rows = list(csv.reader(io.StringIO(text)))
     return _rows_to_table_doc(p, rows, fmt="csv")
 
 
@@ -174,6 +186,55 @@ def _read_docx(p: Path) -> ParsedDoc:
         text=text, kind="document",
         meta={"format": "docx", "filename": p.name, "chars": len(text)},
     )
+
+
+def _read_doc(p: Path) -> ParsedDoc:
+    # 旧版二进制 .doc（OLE2 复合文档）。用 olefile 打开、读 WordDocument 流提取正文。
+    # 无完美轻量解析器；中文 .doc 正文多为 UTF-16-LE，西文多为 cp1252，两种都试。
+    try:
+        import olefile  # lazy (optional dep)
+    except ImportError as exc:
+        raise ParseError(f"解析 {p.name} 需要 olefile：pip install olefile") from exc
+    try:
+        ole = olefile.OleFileIO(str(p))
+        try:
+            data = ole.openstream("WordDocument").read()
+        finally:
+            ole.close()
+    except Exception as exc:
+        raise ParseError(
+            f"{p.name} 不是有效的 .doc（可能实为 RTF/HTML 改名或已损坏）。"
+            "建议在 Word 里另存为 .docx 后重传。"
+        ) from exc
+    text = _extract_doc_text(data)
+    if len(text.strip()) < 8:
+        raise ParseError(
+            f"{p.name} 未能提取到正文（格式特殊或损坏）。建议另存为 .docx 或 PDF 后重传。"
+        )
+    return ParsedDoc(
+        text=text, kind="document",
+        meta={"format": "doc", "filename": p.name, "chars": len(text)},
+    )
+
+
+def _extract_doc_text(data: bytes) -> str:
+    """Crude text extraction from a .doc WordDocument stream.
+
+    Decodes the stream as both UTF-16-LE and cp1252, keeps runs of printable
+    chars (incl. CJK), and returns the longer result. Noisy but good enough
+    for LLM analysis; the model tolerates surrounding formatting noise.
+    """
+    import re
+    run_re = re.compile("[" + chr(0x20) + "-" + chr(0x9FFF) + "]{4,}")
+
+    def _runs(s: str) -> str:
+        return "\n".join(run_re.findall(s))
+
+    cand_utf16 = _runs(data.decode("utf-16-le", errors="ignore"))
+    cand_cp = _runs(data.decode("cp1252", errors="ignore"))
+    # collapse blank lines / excessive whitespace
+    best = cand_utf16 if len(cand_utf16) >= len(cand_cp) else cand_cp
+    return re.sub(r"\n{3,}", "\n\n", best).strip()
 
 
 def _read_pptx(p: Path) -> ParsedDoc:
