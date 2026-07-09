@@ -10,13 +10,15 @@ In Docker:    see Dockerfile / docker-compose.yml
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -54,6 +56,16 @@ class ChatOut(BaseModel):
     iterations: int
     stopped_early: bool
     steps: List[Dict[str, Any]]
+
+
+class AnalyzeOut(BaseModel):
+    kind: str
+    meta: Dict[str, Any]
+    analysis: Dict[str, Any]
+
+
+# Hard upload cap to protect the server from OOM while parsing huge files.
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 @app.get("/")
@@ -98,6 +110,43 @@ def chat(body: ChatIn) -> ChatOut:
         stopped_early=result.stopped_early,
         steps=steps,
     )
+
+
+@app.post("/api/analyze", response_model=AnalyzeOut)
+async def analyze(file: UploadFile = File(...), focus: str = Form("")):
+    """Upload a file (txt/csv/xlsx/pdf/docx/pptx) → parse → LLM analysis.
+
+    Implements the `/api/import/excel`-style upload that `docs/api.md` spec'd but
+    never had. Saves the upload to a temp file, parses it (lightweight libs), then
+    runs the doc-analysis pipeline (existing provider). Returns parsed `kind`/`meta`
+    + the structured analysis (risks[] for documents, insights[]/metrics for tables).
+    """
+    from tradeflow.docanalysis import analyze as run_analyze
+    from tradeflow.docparse import ParseError, parse_file
+
+    suffix = Path(file.filename or "").suffix or ""
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件过大（{len(data) // 1024 // 1024}MB），上限 20MB，请拆分或裁剪后重传。",
+        )
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        try:
+            parsed = parse_file(tmp_path)
+        except ParseError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        parsed.meta["uploaded_as"] = file.filename  # show the user's filename, not the temp one
+        result = run_analyze(parsed, focus=focus)
+        return AnalyzeOut(kind=parsed.kind, meta=parsed.meta, analysis=result)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

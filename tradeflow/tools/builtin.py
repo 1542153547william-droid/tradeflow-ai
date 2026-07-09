@@ -13,6 +13,7 @@ import operator
 from .amazon import AMAZON_TOOLS
 from .base import tool
 from .compliance import COMPLIANCE_TOOLS, check_forbidden_words  # noqa: F401  (re-export)
+from .docanalysis import parse_document  # deterministic file parser (safe default)
 
 # --- safe arithmetic ------------------------------------------------------
 _OPS = {
@@ -39,4 +40,4 @@ def calculator(expression: str) -> str:
     return str(value)
 
 
-BUILTIN_TOOLS = [calculator, *COMPLIANCE_TOOLS, *AMAZON_TOOLS]
+BUILTIN_TOOLS = [calculator, *COMPLIANCE_TOOLS, *AMAZON_TOOLS, parse_document]

@@ -32,6 +32,10 @@ class Settings:
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
     # 商品查询系统（独立 HTTP 服务，不是 amazon.com）的地址，供 tools/amazon.py 调用。
     query_api_url: str = os.environ.get("QUERY_API_URL", "http://127.0.0.1:8000")
+    # 文件分析（docparse/docanalysis）：表格最多喂多少行；总文本最多多少字符。
+    # 超出则截断（不崩）。上限受模型上下文窗口约束（qwen-plus ~131K token）。
+    doc_max_rows: int = int(os.environ.get("DOC_MAX_ROWS", "1500"))
+    doc_max_chars: int = int(os.environ.get("DOC_MAX_CHARS", "150000"))
     # Alibaba Bailian / DashScope (Qwen) — OpenAI-compatible, works from mainland.
     bailian_api_key: Optional[str] = (
         os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("BAILIAN_API_KEY")

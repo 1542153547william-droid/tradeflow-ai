@@ -52,6 +52,12 @@ class OpenAICompatProvider(LLMProvider):
         kwargs: Dict[str, Any] = {"api_key": self._api_key}
         if self._base_url:
             kwargs["base_url"] = self._base_url
+        # Bailian/Qwen + DeepSeek are reachable directly from mainland China. Never
+        # route them through an env-var proxy (HTTP_PROXY/HTTPS_PROXY), which on a
+        # mainland host typically points overseas and breaks the domestic endpoint.
+        # trust_env=False makes httpx ignore those env vars and connect directly.
+        import httpx  # type: ignore  (shipped with the openai SDK)
+        kwargs["http_client"] = httpx.Client(trust_env=False)
         self._client = OpenAI(**kwargs)
 
     def complete(
