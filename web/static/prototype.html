@@ -708,7 +708,7 @@ button.imgbox{font-family:inherit}
     const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
     const setLive=(s)=>{const el=t.querySelector('.live');if(el)el.textContent=s;scrollDown();};
-    let toolsSeen=[];
+    let toolsSeen=[],gotFinal=false;
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
         headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
@@ -728,16 +728,38 @@ button.imgbox{font-family:inherit}
             setLive(AGENT_CN[agent]+' · '+evt.message);
             if(evt.tools&&evt.tools.length)toolsSeen=toolsSeen.concat(evt.tools);
           }else if(evt.type==='final'){
-            t.remove();
+            gotFinal=true;t.remove();
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
             addAgent('<div class="bubble"><div>'+fmt(evt.reply)+'</div>'+badge+'</div>');
           }else if(evt.type==='error'){
-            t.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');
+            gotFinal=true;t.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');
           }
         }
       }
-    }catch(e){t.remove();
-      addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))+'。请确认服务在 8000 端口运行。</div></div>');}
+      if(!gotFinal)throw new Error('流式连接中断（无 final 事件）');
+    }catch(e){
+      // 流式失败（最常见：反向代理 / CDN 不支持 SSE 长连接，返回 502/504）→
+      // 自动回退到非流式 /api/chat（一次性 JSON，可穿透几乎任何代理）。
+      if(!gotFinal)await chatFallback(text,agent,t,setLive);
+    }
+  }
+  // 非流式兜底：一次性 POST /api/chat，绕开不支持 SSE 的代理层。
+  async function chatFallback(text,agent,t,setLive){
+    setLive(AGENT_CN[agent]+' · 处理中（兼容模式）…');
+    try{
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:storeContext()+text,agent})});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      t.remove();
+      const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
+      const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(tools.join(', '))}</div>`:'';
+      addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
+    }catch(e){
+      t.remove();
+      addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))
+        +'。请检查 web 服务是否在运行，以及反向代理是否放行 /api 路径。</div></div>');
+    }
   }
   /* ---- 选品：调结构化接口出可「放入机会上新」的机会卡（B0） ---- */
   let lastSuggest=[];
