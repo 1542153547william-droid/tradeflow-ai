@@ -26,6 +26,13 @@ services:
     # the tool then returns an error. mock = offline sample data; api = Rainforest.
     environment:
       - DATA_SOURCE_MODE=scraper
+      - ALLOW_MOCK_FALLBACK=false
+      - TOP_N=5
+      - CACHE_TTL_HOURS=24
+      - SCRAPER_MIN_DELAY=5
+      - SCRAPER_MAX_DELAY=10
+      - SCRAPER_FETCH_BRAND=false
+      - SCRAPER_FETCH_QA=false
     expose:
       - "8000"
     restart: unless-stopped

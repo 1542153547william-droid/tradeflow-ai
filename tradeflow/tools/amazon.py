@@ -70,6 +70,7 @@ def search_products(keyword: str, platform: str = "amazon", top_n: int = 10,
         "platform": platform,
         "top_n": top_n,
         "include_reviews": include_reviews,
+        "include_detail": False,
     }
     if marketplace:
         payload["marketplace"] = marketplace
