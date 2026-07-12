@@ -157,6 +157,134 @@ def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
             "row_count": len(data)}
 
 
+def ads_chat_analysis(user_id: str, store_id: str) -> str | None:
+    """Return a concise, actionable ad report analysis for chat.
+
+    The regular agent tools read files from data/ads. Imported user reports live
+    in SQLite, so chat needs this bridge to avoid claiming that no report exists.
+    """
+    with connect() as db:
+        rows = db.execute(
+            "SELECT r.row_json FROM imported_rows r JOIN import_batches b ON b.id=r.batch_id "
+            "WHERE r.user_id=? AND r.store_id=? AND b.report_type='ads_search_terms'",
+            (user_id, store_id),
+        ).fetchall()
+    data = [json.loads(r[0]) for r in rows]
+    if not data:
+        return None
+
+    def num(value: Any) -> float:
+        try:
+            return float(str(value or 0).replace(",", "").replace("$", "") or 0)
+        except ValueError:
+            return 0.0
+
+    campaigns: dict[str, dict[str, Any]] = {}
+    terms: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in data:
+        campaign = str(row.get("campaign") or "未命名广告活动")
+        term = str(row.get("search_term") or "(空搜索词)").strip() or "(空搜索词)"
+        c = campaigns.setdefault(campaign, {"campaign": campaign, "impressions": 0.0, "clicks": 0.0,
+                                            "spend": 0.0, "sales": 0.0, "orders": 0.0})
+        t = terms.setdefault((campaign, term), {"campaign": campaign, "term": term, "impressions": 0.0,
+                                                "clicks": 0.0, "spend": 0.0, "sales": 0.0, "orders": 0.0})
+        for key in ("impressions", "clicks", "spend", "sales", "orders"):
+            value = num(row.get(key))
+            c[key] += value
+            t[key] += value
+
+    def enrich(item: dict[str, Any]) -> dict[str, Any]:
+        spend, sales, clicks, impressions, orders = (
+            item["spend"], item["sales"], item["clicks"], item["impressions"], item["orders"])
+        item["acos"] = spend / sales if sales else None
+        item["ctr"] = clicks / impressions if impressions else 0.0
+        item["cvr"] = orders / clicks if clicks else 0.0
+        item["cpc"] = spend / clicks if clicks else 0.0
+        return item
+
+    campaign_items = [enrich(dict(v)) for v in campaigns.values()]
+    term_items = [enrich(dict(v)) for v in terms.values()]
+    high_acos_campaigns = sorted(
+        [x for x in campaign_items if x["spend"] >= 10 and (x["acos"] is None or x["acos"] >= 0.4)],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:5]
+    negatives = sorted(
+        [x for x in term_items if x["spend"] >= 5 and x["orders"] == 0],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:8]
+    reduce_bids = sorted(
+        [x for x in term_items if x["spend"] >= 5 and x["sales"] > 0 and x["acos"] and x["acos"] >= 0.4],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:6]
+    scale_terms = sorted(
+        [x for x in term_items if x["orders"] >= 2 and x["acos"] is not None and 0 < x["spend"]
+         and x["acos"] <= 0.2],
+        key=lambda x: (x["acos"], -x["orders"]),
+    )[:8]
+
+    total = enrich({
+        "impressions": sum(x["impressions"] for x in campaign_items),
+        "clicks": sum(x["clicks"] for x in campaign_items),
+        "spend": sum(x["spend"] for x in campaign_items),
+        "sales": sum(x["sales"] for x in campaign_items),
+        "orders": sum(x["orders"] for x in campaign_items),
+    })
+
+    def money(value: float) -> str:
+        return f"{value:.2f}"
+
+    def pct(value: float | None) -> str:
+        return "无销售" if value is None else f"{value * 100:.1f}%"
+
+    lines = [
+        f"已读取你导入的广告搜索词报表，共 {len(data)} 行。按真实入库数据计算：",
+        "",
+        "整体盘面：",
+        f"- 花费 {money(total['spend'])}，销售额 {money(total['sales'])}，订单 {int(total['orders'])}，ACOS {pct(total['acos'])}，转化率 {pct(total['cvr'])}。",
+        "",
+        "建议否定或重点排查的搜索词：",
+    ]
+    if negatives:
+        for x in negatives:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，花费 {money(x['spend'])}，点击 {int(x['clicks'])}，0 单。")
+    else:
+        lines.append("- 暂无达到阈值的零转化高花费词。")
+
+    lines.extend(["", "建议降价/降预算的广告活动："])
+    if high_acos_campaigns:
+        for x in high_acos_campaigns:
+            lines.append(
+                f"- {x['campaign']}：花费 {money(x['spend'])}，销售额 {money(x['sales'])}，订单 {int(x['orders'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 暂无明显高 ACOS 活动。")
+
+    lines.extend(["", "建议降低竞价的搜索词："])
+    if reduce_bids:
+        for x in reduce_bids:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，花费 {money(x['spend'])}，销售额 {money(x['sales'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 暂无明显高 ACOS 搜索词。")
+
+    lines.extend(["", "建议加预算/转精准的词："])
+    if scale_terms:
+        for x in scale_terms:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，订单 {int(x['orders'])}，花费 {money(x['spend'])}，销售额 {money(x['sales'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 目前没有同时满足 2 单以上且 ACOS <= 20% 的放量词。")
+
+    lines.extend([
+        "",
+        "执行顺序建议：先否定零转化高花费词，再处理高 ACOS 活动，最后把低 ACOS 出单词单独拉到精准广告里放量。",
+    ])
+    return "\n".join(lines)
+
+
 def competitor_rows(user_id: str, store_id: str, limit: int = 20) -> list[dict[str, Any]]:
     """Return real competitor rows uploaded by this store, newest first."""
     with connect() as db:

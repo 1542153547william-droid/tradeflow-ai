@@ -36,7 +36,7 @@ from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
-from web.import_service import (ads_overview, competitor_rows, list_imports,
+from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, list_imports,
                                 parse_upload, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
@@ -129,6 +129,18 @@ class ChatOut(BaseModel):
     iterations: int
     stopped_early: bool
     steps: List[Dict[str, Any]]
+
+
+def _imported_report_chat_reply(message: str, user_id: str, store_id: str) -> str | None:
+    text = message.lower()
+    asks_ads = any(k in text for k in ("广告", "acos", "竞价", "否词", "否定", "加预算", "降价", "搜索词"))
+    asks_imported = any(k in text for k in ("导入", "报表", "刚上传", "刚导", "excel", "xlsx", "csv"))
+    if not (asks_ads and asks_imported):
+        return None
+    reply = ads_chat_analysis(user_id, store_id)
+    if reply:
+        return reply
+    return "我还没有读到已导入的广告搜索词报表。请先到「数据导入」上传广告报表，并确认字段映射后再让我分析。"
 
 
 @app.get("/")
@@ -258,7 +270,12 @@ def opportunities_suggest(body: OppSuggestIn,
 
 
 @app.post("/api/chat", response_model=ChatOut)
-def chat(body: ChatIn) -> ChatOut:
+def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
+         x_tradeflow_store: str = Header(default="default")) -> ChatOut:
+    imported_reply = _imported_report_chat_reply(body.message, x_tradeflow_user, x_tradeflow_store)
+    if imported_reply:
+        return ChatOut(reply=imported_reply, iterations=0, stopped_early=False, steps=[])
+
     steps: List[Dict[str, Any]] = []
 
     def observe(step: AgentStep) -> None:
@@ -286,7 +303,8 @@ def _sse(event: Dict[str, Any]) -> str:
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(body: ChatIn) -> StreamingResponse:
+async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
+                      x_tradeflow_store: str = Header(default="default")) -> StreamingResponse:
     """SSE 流式版对话：边跑边把进度推给前端，避免长任务（抓竞品等）看起来像卡死。
 
     agent.run_stream 逐事件产出：("tools",…) 本轮要调的工具、("token",…) 最终答案的
@@ -295,6 +313,16 @@ async def chat_stream(body: ChatIn) -> StreamingResponse:
     """
     loop = asyncio.get_event_loop()
     queue: asyncio.Queue = asyncio.Queue()
+
+    imported_reply = _imported_report_chat_reply(body.message, x_tradeflow_user, x_tradeflow_store)
+    if imported_reply:
+        async def imported_event_gen():
+            yield _sse({"type": "status", "iteration": 0, "message": "正在读取已导入报表并计算指标 …"})
+            yield _sse({"type": "final", "reply": imported_reply, "iterations": 0, "stopped_early": False})
+
+        return StreamingResponse(imported_event_gen(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache",
+                                          "X-Accel-Buffering": "no"})
 
     def push(evt: Dict[str, Any]) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, evt)

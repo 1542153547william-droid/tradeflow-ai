@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
 from web import database, store
-from web.import_service import (ads_overview, competitor_rows, detect_report_type,
+from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
 
 
@@ -85,6 +85,23 @@ class TestTenantPersistence(unittest.TestCase):
         result = ads_overview("default", "default")
         self.assertEqual(result["source"], "imported_report")
         self.assertEqual(result["items"][0]["acos"], 0.25)
+
+    def test_imported_ads_can_be_analyzed_from_chat(self):
+        mapping = {"Campaign Name": "campaign", "Clicks": "clicks", "Impressions": "impressions",
+                   "Spend": "spend", "Sales": "sales", "Orders": "orders",
+                   "Customer Search Term": "search_term"}
+        rows = [
+            {"Campaign Name": "C1", "Clicks": 12, "Impressions": 100, "Spend": 15,
+             "Sales": 0, "Orders": 0, "Customer Search Term": "bad term"},
+            {"Campaign Name": "C2", "Clicks": 8, "Impressions": 100, "Spend": 8,
+             "Sales": 100, "Orders": 3, "Customer Search Term": "good term"},
+        ]
+        save_import("default", "default", "ads.xlsx", list(mapping), rows, mapping)
+        reply = ads_chat_analysis("default", "default")
+        self.assertIsNotNone(reply)
+        self.assertIn("已读取你导入的广告搜索词报表", reply)
+        self.assertIn("bad term", reply)
+        self.assertIn("good term", reply)
 
     def test_competitor_import_can_drive_offline_flow(self):
         mapping = {"ASIN": "asin", "Title": "title", "Price": "price", "Rating": "rating"}
