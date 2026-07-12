@@ -166,6 +166,8 @@ class SearchRequest(BaseModel):
     platform: str = "amazon"              # 目标平台（amazon / ebay / walmart …）
     marketplace: Optional[str] = None
     top_n: Optional[int] = Field(default=None, ge=1, le=20)
-    include_reviews: bool = True
-    include_detail: bool = True
+    # Low-frequency MVP defaults: one search page only. Detail/review enrichment
+    # must be explicitly requested because each item otherwise opens more pages.
+    include_reviews: bool = False
+    include_detail: bool = False
     force_refresh: bool = False

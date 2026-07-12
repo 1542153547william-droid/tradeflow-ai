@@ -469,15 +469,9 @@ button.imgbox{font-family:inherit}
               <input type="file" id="fileInp" hidden>
             </label>
             <div id="mapping" style="display:none;margin-top:16px">
-              <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span class="pill good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:11px;height:11px"><path d="M20 6L9 17l-5-5"/></svg>已解析</span><b id="fileName">ads_report_90d.xlsx</b><span style="color:var(--dim)">· 1,204 行 · 12 列</span></div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span class="pill good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:11px;height:11px"><path d="M20 6L9 17l-5-5"/></svg>已解析</span><b id="fileName"></b><span id="fileMeta" style="color:var(--dim)"></span></div>
               <p style="font-size:12.5px;color:var(--dim);margin:0 0 10px">确认列与字段的对应关系：</p>
-              <div class="tbl-wrap"><table>
-                <tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>
-                <tr><td class="mono">Advertised ASIN</td><td class="mono">B0C1X2Y3Z4</td><td><select><option selected>ASIN</option><option>SKU</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Customer Search Term</td><td>cool mist humidifier</td><td><select><option selected>搜索词</option><option>关键词</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Impressions</td><td class="mono">18,204</td><td><select><option selected>曝光量</option><option>点击量</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Spend</td><td class="mono">$342.10</td><td><select><option selected>花费</option><option>销售额</option><option>忽略</option></select></td></tr>
-              </table></div>
+              <div class="tbl-wrap"><table id="mappingTbl"><tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr></table></div>
               <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:14px"><button class="btn" id="cancelMap">取消</button><button class="btn primary" id="confirmMap">确认导入</button></div>
             </div>
           </div>
@@ -485,8 +479,6 @@ button.imgbox{font-family:inherit}
         <h3 style="font-size:14px;margin:24px 0 12px">导入历史</h3>
         <div class="card" style="padding:6px 10px"><div class="tbl-wrap"><table id="histTbl">
           <tr><th>来源</th><th>数据类型</th><th>行数</th><th>时间</th><th>状态</th></tr>
-          <tr><td><span class="pill accent"><span class="d"></span>后台</span></td><td>Listing + 订单</td><td class="mono">312</td><td class="tnum">今天 09:14</td><td><span class="pill good">完成</span></td></tr>
-          <tr><td><span class="pill amber"><span class="d"></span>Excel</span></td><td>90天广告报表</td><td class="mono">1,204</td><td class="tnum">昨天 21:03</td><td><span class="pill good">完成</span></td></tr>
         </table></div></div>
       </section>
 
@@ -538,8 +530,12 @@ button.imgbox{font-family:inherit}
 
   /* ---------- stores ---------- */
   const MK={US:'美国',UK:'英国',DE:'德国',JP:'日本'};
-  let stores=[{id:1,name:'Aurora Home US',mk:'US',status:'good',sync:'2 小时前'},{id:2,name:'Aurora Home DE',mk:'DE',status:'warn',sync:'3 天前'}];
-  let curStore=1;
+  let stores=[{id:'default',name:'默认店铺',mk:'US',status:'good',sync:'未同步'}];
+  let curStore='default';
+  const nativeFetch=window.fetch.bind(window);
+  window.fetch=(input,init={})=>{const url=typeof input==='string'?input:input.url;
+    if(url&&url.startsWith('/api/')){const headers=new Headers(init.headers||{});headers.set('X-TradeFlow-Store',curStore||'default');init={...init,headers};}
+    return nativeFetch(input,init);};
   const sColor={good:'var(--good)',warn:'var(--warn)',crit:'var(--crit)'},sText={good:'授权有效',warn:'即将过期',crit:'需重新授权'};
   function renderStores(){
     const m=$('#storeMenu');m.innerHTML='';
@@ -548,7 +544,7 @@ button.imgbox{font-family:inherit}
       el.onclick=()=>{curStore=s.id;syncStore();m.classList.remove('open');};m.appendChild(el);});
     const sep=document.createElement('div');sep.className='sep';m.appendChild(sep);
     const add=document.createElement('div');add.className='store-item';add.style.color='var(--accent-strong)';
-    add.innerHTML='<span style="width:7px"></span><span class="meta"><b>＋ 授权新店铺</b></span>';add.onclick=()=>{m.classList.remove('open');openAuth();};m.appendChild(add);
+    add.innerHTML='<span style="width:7px"></span><span class="meta"><b>＋ 新建店铺空间</b></span>';add.onclick=()=>{m.classList.remove('open');openAuth();};m.appendChild(add);
   }
   function syncStore(){const s=stores.find(x=>x.id===curStore);$('#storeName').textContent=s.name;$('#storeMk').textContent='· '+MK[s.mk];$('#impStore').textContent=s.name;renderStores();}
   $('#storeBtn').onclick=e=>{e.stopPropagation();$('#storeMenu').classList.toggle('open');};
@@ -566,14 +562,14 @@ button.imgbox{font-family:inherit}
   function closeModal(){ov.classList.remove('open');ov.innerHTML='';}
   ov.onclick=e=>{if(e.target===ov)closeModal();};
   function openAuth(){
-    modal(`<div class="mh"><h3>授权亚马逊店铺</h3><button class="x" data-close>×</button></div><div class="mb">
+    modal(`<div class="mh"><h3>新建店铺数据空间</h3><button class="x" data-close>×</button></div><div class="mb">
       <label class="fld"><span class="cap">选择站点 Marketplace</span><select id="mkSel"><option value="US">北美 · 美国 (US)</option><option value="UK">欧洲 · 英国 (UK)</option><option value="DE">欧洲 · 德国 (DE)</option><option value="JP">日本 (JP)</option></select></label>
       <label class="fld" style="margin:0"><span class="cap">店铺备注名</span><input type="text" id="stName" placeholder="例如 Aurora Home US"></label>
-      <p style="font-size:12px;color:var(--dim);margin-top:14px;line-height:1.6">点击后跳转亚马逊 SP-API 授权页（LWA / Selling Partner OAuth），授权后自动回调绑定，Token 存于后端。</p></div>
-      <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="goAuth">前往亚马逊授权</button></div>`);
-    $('#goAuth').onclick=()=>{const mk=$('#mkSel').value,nm=$('#stName').value||('New Store '+mk);
-      $('#goAuth').textContent='跳转授权中…';$('#goAuth').disabled=true;
-      setTimeout(()=>{const id=Date.now();stores.push({id,name:nm,mk,status:'good',sync:'刚刚'});curStore=id;syncStore();closeModal();toast('店铺「'+nm+'」授权成功');},1500);};
+      <p style="font-size:12px;color:var(--dim);margin-top:14px;line-height:1.6">用于隔离该店铺上传的报表、机会商品和分析结果。Amazon OAuth 自动同步将在取得 SP-API 资质后启用。</p></div>
+      <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="goAuth">创建</button></div>`);
+    $('#goAuth').onclick=async()=>{const mk=$('#mkSel').value,nm=$('#stName').value||('New Store '+mk);
+      $('#goAuth').textContent='创建中…';$('#goAuth').disabled=true;
+      try{const r=await fetch('/api/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,marketplace:mk})});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();stores.push({id:d.id,name:d.name,mk:d.marketplace,status:'good',sync:'未同步'});curStore=d.id;syncStore();closeModal();toast('店铺空间已创建');}catch(e){toast('创建失败：'+String(e.message||e));$('#goAuth').disabled=false;$('#goAuth').textContent='创建';}};
   }
   $('#authBtn').onclick=openAuth;
 
@@ -707,7 +703,7 @@ button.imgbox{font-family:inherit}
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
-    let think=mkThink(), toolsSeen=[], ans=null, streamEl=null, raw='';
+    let think=mkThink(), toolsSeen=[], ans=null, streamEl=null, raw='',gotFinal=false;
     const setLive=(s)=>{const el=think&&think.querySelector('.live');if(el)el.textContent=s;scrollDown();};
     // 首个 token 到达时：移除思考气泡，建答案气泡，之后逐字追加（打字机效果）。
     const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
@@ -736,6 +732,7 @@ button.imgbox{font-family:inherit}
             if(ans){ans.remove();ans=null;streamEl=null;raw='';}
             if(!think)think=mkThink();
           }else if(evt.type==='final'){
+            gotFinal=true;
             const full=evt.reply||raw;
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
             if(ans){ans.querySelector('.bubble').innerHTML='<div>'+fmt(full)+'</div>'+badge;}
@@ -747,8 +744,15 @@ button.imgbox{font-family:inherit}
           }
         }
       }
-    }catch(e){if(think)think.remove();
-      addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))+'。请确认服务在 8000 端口运行。</div></div>');}
+      if(!gotFinal)throw new Error('流式连接中断（无 final 事件）');
+    }catch(e){
+      if(ans)ans.remove();if(think)think.remove();
+      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+        if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+        const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
+        const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">兼容模式 · 调用工具：${esc(tools.join(', '))}</div>`:'';
+        addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
+      }catch(fallbackError){addAgent('<div class="bubble"><div>⚠️ 后端调用失败：'+esc(String(fallbackError.message||fallbackError))+'</div></div>');}}
   }
   /* ---- 选品：调结构化接口出可「放入机会上新」的机会卡（B0） ---- */
   let lastSuggest=[];
@@ -760,7 +764,7 @@ button.imgbox{font-family:inherit}
         ${o.reason?`<div style="font-size:11.5px;color:var(--dim);margin-top:3px">${esc(o.reason)}</div>`:''}</div>
       <span class="pill amber">评分 ${esc(String(o.score==null?'-':o.score))}</span>
       <button class="btn primary sm suggPick" data-i="${i}">放入机会上新</button></div>`).join('');
-    return `<div class="bubble"><div>为你研判出 ${items.length} 个机会商品（AI 研判，暂未接实时竞品数据）：</div>
+    return `<div class="bubble"><div>基于真实竞品数据研判出 ${items.length} 个机会商品：</div>
       <div class="rc" style="margin-top:10px"><div class="rc-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5s5 1 5 6-4 8-4 8"/></svg>机会商品 · 选品研判</div>${rows}</div>
       ${chips(['换一批看看','厨房家居类目有什么机会？'])}</div>`;
   }
@@ -942,23 +946,31 @@ button.imgbox{font-family:inherit}
     }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">生成失败：'+esc(String(e.message||e))+'</div>';}
     finally{btn.disabled=false;btn.innerHTML=orig;}
   };
-  $('#publishBtn').onclick=()=>{$('#publishBtn').disabled=true;$('#publishBtn').textContent='上传中…';
-    setTimeout(()=>{$('#publishBtn').disabled=false;$('#publishBtn').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊';
-      $('#checkResult').innerHTML='<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>已提交上架 · Feed <span class="mono" style="color:inherit">feed_90417</span> 处理中，约 15 分钟内生效。</div>';toast('Listing 已提交上架');},1600);};
+  $('#publishBtn').onclick=()=>{toast('尚未配置 Amazon SP-API，P0 请复制或导出后手动上架');};
 
   /* ---------- module: import ---------- */
   $$('#importTabs .tab').forEach(t=>t.onclick=()=>{$$('#importTabs .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
     $('#tab-amazon').style.display=t.dataset.t==='amazon'?'':'none';$('#tab-excel').style.display=t.dataset.t==='excel'?'':'none';});
-  const syncSteps=['连接 SP-API…','拉取 Listing…','拉取订单…','解析入库…','完成'];
-  $('#syncBtn').onclick=()=>{const p=$('#syncProg');p.style.display='block';$('#syncBtn').disabled=true;let i=0;
-    const iv=setInterval(()=>{const pct=Math.min(100,Math.round((i+1)/syncSteps.length*100));
-      $('#syncBar').style.width=pct+'%';$('#syncPct').textContent=pct+'%';$('#syncMsg').textContent=syncSteps[Math.min(i,syncSteps.length-1)];
-      if(++i>=syncSteps.length){clearInterval(iv);$('#syncBtn').disabled=false;const r=$('#histTbl').insertRow(1);
-        r.innerHTML='<td><span class="pill accent"><span class="d"></span>后台</span></td><td>Listing + 订单</td><td class="mono">312</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>';toast('同步完成 · 导入 312 行');}},600);};
-  $('#fileInp').onchange=e=>{if(e.target.files[0])$('#fileName').textContent=e.target.files[0].name;$('#mapping').style.display='block';};
+  $('#syncBtn').onclick=()=>toast('尚未配置 Amazon SP-API 授权，请使用 Excel 导入真实报表');
+  let importPreview=null;
+  const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['title','商品标题'],['brand','品牌'],['price','价格'],['rating','评分'],['review_count','评论数'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['stock','库存'],['order_id','订单号']];
+  $('#fileInp').onchange=async e=>{const file=e.target.files[0];if(!file)return;
+    const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent=' · 正在解析…';
+    try{const r=await fetch('/api/imports/preview',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
+      importPreview=await r.json();$('#fileMeta').textContent=` · ${importPreview.row_count} 行 · ${importPreview.columns.length} 列`;
+      const tbl=$('#mappingTbl');tbl.innerHTML='<tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>';
+      importPreview.columns.forEach(c=>{const tr=tbl.insertRow(-1),example=(importPreview.preview[0]||{})[c]??'';
+        tr.innerHTML=`<td class="mono">${esc(c)}</td><td>${esc(String(example))}</td><td><select data-col="${esc(c)}">${mapFields.map(([v,l])=>`<option value="${v}"${importPreview.mapping[c]===v?' selected':''}>${l}</option>`).join('')}</select></td>`;});
+      $('#mapping').style.display='block';
+    }catch(err){toast('解析失败：'+String(err.message||err));$('#mapping').style.display='none';}};
   $('#cancelMap').onclick=()=>{$('#mapping').style.display='none';$('#fileInp').value='';};
-  $('#confirmMap').onclick=()=>{$('#mapping').style.display='none';const r=$('#histTbl').insertRow(1);
-    r.innerHTML='<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>广告报表</td><td class="mono">1,204</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>';toast('Excel 导入完成 · 1,204 行');};
+  $('#confirmMap').onclick=async()=>{const file=$('#fileInp').files[0];if(!file||!importPreview)return;
+    const mapping={};$$('#mappingTbl select').forEach(s=>{if(s.value)mapping[s.dataset.col]=s.value;});
+    const fd=new FormData();fd.append('file',file);fd.append('mapping',JSON.stringify(mapping));
+    $('#confirmMap').disabled=true;
+    try{const r=await fetch('/api/imports',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));const d=await r.json();
+      $('#mapping').style.display='none';const row=$('#histTbl').insertRow(1);row.innerHTML=`<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>${esc(d.report_type)}</td><td class="mono">${d.row_count}</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>`;toast(`Excel 导入完成 · ${d.row_count} 行`);
+    }catch(err){toast('导入失败：'+String(err.message||err));}finally{$('#confirmMap').disabled=false;}};
 
   /* ---------- module: optimize ---------- */
   const products=[
@@ -1039,10 +1051,11 @@ button.imgbox{font-family:inherit}
     $('#mailPreview').innerHTML='<div class="subj">'+hl(t.subj)+'</div>'+hl(t.body).replace(/\n/g,'<br>');}
   $$('#custFilters .tab').forEach(t=>t.onclick=()=>{$$('#custFilters .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');custFilter=t.dataset.f;renderCust();});
   $('#custAll').onchange=e=>{$$('#custTbl .cust').forEach(c=>c.checked=e.target.checked);updCount();};
-  $('#sendMail').onclick=()=>{const n=selCount();if(!n){toast('请先选择买家');return;}toast('已发送 '+n+' 封跟踪邮件');};
+  $('#sendMail').onclick=()=>toast('尚未配置 Buyer-Seller Messaging API，不会模拟发送');
 
   /* ---------- init ---------- */
   renderStores();loadOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+  fetch('/api/stores').then(r=>r.json()).then(d=>{if(d.items&&d.items.length){stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));curStore=stores[0].id;syncStore();}}).catch(()=>{});
 
   /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
   (function initBackend(){

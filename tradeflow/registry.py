@@ -26,6 +26,7 @@ from .tools.market import MARKET_TOOLS
 from .tools.monitor import MONITOR_TOOLS
 from .tools.selection import SELECTION_TOOLS
 from .tools.teardown import TEARDOWN_TOOLS
+from .tools.amazon import AMAZON_TOOLS
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ REGISTRY: Dict[str, AgentSpec] = {
         "审文案/类目合规：禁词+IP+类目风险+白名单", tuple(COMPLIANCE_TOOLS)),
     "listing": AgentSpec(
         "listing", "#2 Listing 文案",
-        "产出多站点 Listing 文案，自动埋词并过合规", tuple(LISTING_TOOLS)),
+        "产出多站点 Listing 文案，自动埋词并过合规", tuple(LISTING_TOOLS + AMAZON_TOOLS)),
     "imagery": AgentSpec(
         "imagery", "#3 图文视频提示词",
         "绘图 prompt + 短视频脚本 + 图片规范校验", tuple(IMAGERY_TOOLS)),
@@ -52,17 +53,17 @@ REGISTRY: Dict[str, AgentSpec] = {
         "解析广告/结算报表：指标盘面+SKU盈亏线+搜索词三分类+调价否定建议", tuple(ADS_TOOLS)),
     "teardown": AgentSpec(
         "teardown", "#5 爆款拆解",
-        "拆竞品 ASIN：Listing/变体/定价/痛点 + 运营模式判定", tuple(TEARDOWN_TOOLS)),
+        "拆竞品 ASIN：Listing/变体/定价/痛点 + 运营模式判定", tuple(TEARDOWN_TOOLS + AMAZON_TOOLS)),
     "market": AgentSpec(
         "market", "#6 市场分析",
-        "类目/关键词蓝海红海研判：体量/竞争强度/价格带/风险", tuple(MARKET_TOOLS)),
+        "类目/关键词蓝海红海研判：体量/竞争强度/价格带/风险", tuple(MARKET_TOOLS + AMAZON_TOOLS)),
     "monitor": AgentSpec(
         "monitor", "竞品监控分析",
         "盯竞品：快照对比预警 + 多竞品横向对比找我方短板与差异化机会", tuple(MONITOR_TOOLS)),
     "selection": AgentSpec(
         "selection", "#7 智能选品",
         "选品决策：多维评分+毛利测算，综合 #1/#5/#6 给风险收益结论",
-        tuple(SELECTION_TOOLS), subagents=("compliance", "teardown", "market")),
+        tuple(SELECTION_TOOLS + AMAZON_TOOLS), subagents=("compliance", "teardown", "market")),
 }
 
 

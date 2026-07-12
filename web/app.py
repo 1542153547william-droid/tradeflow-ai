@@ -17,10 +17,12 @@ from typing import Any, Dict, List
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import asyncio  # noqa: E402
+import base64  # noqa: E402
+import hmac  # noqa: E402
 import json  # noqa: E402
 import threading  # noqa: E402
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -33,12 +35,77 @@ from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
+from web.database import connect, init_db  # noqa: E402
+from web.import_service import (ads_overview, competitor_rows, list_imports,
+                                parse_upload, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
 
 # 前端可选项 = "通用助手" + 注册表里的全部业务智能体（单一事实来源，见 0.2 registry）。
 _DEFAULT = {"key": "default", "label": "通用助手", "desc": "默认工具集，无专属人设"}
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    if settings.basic_auth_user and settings.basic_auth_password:
+        encoded = request.headers.get("Authorization", "").removeprefix("Basic ")
+        try:
+            supplied = base64.b64decode(encoded).decode("utf-8")
+        except Exception:
+            supplied = ""
+        expected = f"{settings.basic_auth_user}:{settings.basic_auth_password}"
+        if not hmac.compare_digest(supplied, expected):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "需要登录"}, status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="TradeFlow-AI"'})
+    if (request.url.path.startswith("/api/") and settings.api_token
+            and request.headers.get("X-TradeFlow-Token") != settings.api_token):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "无效的访问令牌"}, status_code=401)
+    return await call_next(request)
+
+
+def _scope(x_tradeflow_token: str | None = Header(default=None),
+           x_tradeflow_user: str = Header(default="default"),
+           x_tradeflow_store: str = Header(default="default")) -> tuple[str, str]:
+    if settings.api_token and x_tradeflow_token != settings.api_token:
+        raise HTTPException(status_code=401, detail="无效的访问令牌")
+    with connect() as db:
+        ok = db.execute("SELECT 1 FROM stores WHERE id=? AND user_id=?",
+                        (x_tradeflow_store, x_tradeflow_user)).fetchone()
+    if not ok:
+        raise HTTPException(status_code=403, detail="无权访问该店铺")
+    return x_tradeflow_user, x_tradeflow_store
+
+
+@app.get("/api/stores")
+def stores(x_tradeflow_user: str = Header(default="default")) -> Dict[str, Any]:
+    with connect() as db:
+        rows = db.execute("SELECT id,name,marketplace,created_at FROM stores WHERE user_id=? ORDER BY created_at",
+                          (x_tradeflow_user,)).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+class StoreIn(BaseModel):
+    name: str
+    marketplace: str = "US"
+
+
+@app.post("/api/stores")
+def create_store(body: StoreIn, x_tradeflow_user: str = Header(default="default")) -> Dict[str, Any]:
+    import uuid
+    store_id = f"store_{uuid.uuid4().hex[:10]}"
+    with connect() as db:
+        db.execute("INSERT OR IGNORE INTO users(id,name) VALUES(?,?)", (x_tradeflow_user, x_tradeflow_user))
+        db.execute("INSERT INTO stores(id,user_id,name,marketplace) VALUES(?,?,?,?)",
+                   (store_id, x_tradeflow_user, body.name, body.marketplace))
+    return {"id": store_id, "name": body.name, "marketplace": body.marketplace}
 
 
 def _agent_list() -> List[Dict[str, str]]:
@@ -94,19 +161,62 @@ def agents() -> List[Dict[str, str]]:
 
 # ---- 机会上新：真实持久化的 CRUD（B1） ----
 @app.get("/api/opportunities")
-def list_opportunities() -> Dict[str, Any]:
-    return {"items": store.list_opps()}
+def list_opportunities(x_tradeflow_user: str = Header(default="default"),
+                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return {"items": store.list_opps(x_tradeflow_user, x_tradeflow_store)}
 
 
 @app.post("/api/opportunities")
-def create_opportunity(body: Dict[str, Any]) -> Dict[str, Any]:
+def create_opportunity(body: Dict[str, Any], x_tradeflow_user: str = Header(default="default"),
+                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
     # 入参是前端传的机会对象（name/cat/score/margin/…），存储层负责补 id/时间/去重。
-    return store.add_opp(body)
+    return store.add_opp(body, x_tradeflow_user, x_tradeflow_store)
 
 
 @app.delete("/api/opportunities/{opp_id}")
-def remove_opportunity(opp_id: str) -> Dict[str, bool]:
-    return {"ok": store.delete_opp(opp_id)}
+def remove_opportunity(opp_id: str, x_tradeflow_user: str = Header(default="default"),
+                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, bool]:
+    return {"ok": store.delete_opp(opp_id, x_tradeflow_user, x_tradeflow_store)}
+
+
+@app.post("/api/imports/preview")
+async def import_preview(file: UploadFile = File(...)) -> Dict[str, Any]:
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件不能超过 20MB")
+    try:
+        columns, rows = parse_upload(file.filename or "upload.xlsx", content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    mapping = suggest_mapping(columns)
+    return {"filename": file.filename, "columns": columns, "mapping": mapping,
+            "preview": rows[:10], "row_count": len(rows)}
+
+
+@app.post("/api/imports")
+async def import_commit(file: UploadFile = File(...), mapping: str = Form(default="{}"),
+                        x_tradeflow_user: str = Header(default="default"),
+                        x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    content = await file.read()
+    try:
+        columns, rows = parse_upload(file.filename or "upload.xlsx", content)
+        selected = json.loads(mapping) if mapping and mapping != "{}" else suggest_mapping(columns)
+        return save_import(x_tradeflow_user, x_tradeflow_store, file.filename or "upload.xlsx",
+                           columns, rows, selected)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/imports")
+def imports(x_tradeflow_user: str = Header(default="default"),
+            x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return {"items": list_imports(x_tradeflow_user, x_tradeflow_store)}
+
+
+@app.get("/api/optimization/ads")
+def optimization_ads(x_tradeflow_user: str = Header(default="default"),
+                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return ads_overview(x_tradeflow_user, x_tradeflow_store)
 
 
 # ---- 合规预检：直接调 #1 合规的确定性工具，返回结构化结果（B1，无需过模型） ----
@@ -140,8 +250,11 @@ class OppSuggestIn(BaseModel):
 
 
 @app.post("/api/opportunities/suggest")
-def opportunities_suggest(body: OppSuggestIn) -> Dict[str, Any]:
-    return suggest_opportunities(body.query, body.top_n)
+def opportunities_suggest(body: OppSuggestIn,
+                          x_tradeflow_user: str = Header(default="default"),
+                          x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return suggest_opportunities(
+        body.query, body.top_n, competitor_rows(x_tradeflow_user, x_tradeflow_store))
 
 
 @app.post("/api/chat", response_model=ChatOut)

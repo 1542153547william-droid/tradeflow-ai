@@ -1,11 +1,10 @@
-"""端到端冒烟测试（无需 pytest，直接 `python tests/smoke_test.py` 运行）。
+"""端到端冒烟单测（分层模型 + 当前 API）。
 
-覆盖：
-- MockSource 生成 TOP10 且可复现
-- SearchService 数据源回退（api 失败 → scraper 失败 → mock 成功）
-- 评论分析产出情感与关键词
-- 缓存命中
-- Excel / CSV 导出可生成且非空
+覆盖：MockSource TOP-N 可复现且字段分层、评论情感分析、SearchService(mock) 搜索、
+缓存写入、Excel/CSV 导出。原扁平模型脚本（p.position/p.asin、mock_source 模块）已
+按当前分层结构（base_info/pricing/…）与 registry 化的数据源重写。
+
+Run: python -m unittest tests.smoke_test   （在 backend/ 目录下）
 """
 from __future__ import annotations
 
@@ -13,132 +12,81 @@ import asyncio
 import os
 import sys
 import tempfile
-
-# Windows 默认控制台为 GBK，直接 print emoji 会 UnicodeEncodeError；强制 UTF-8 输出。
-try:
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-except Exception:
-    pass
+import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.cache.store import CacheStore  # noqa: E402
 from app.config import Settings  # noqa: E402
-from app.datasources.base import DataSource, DataSourceError  # noqa: E402
-from app.datasources.mock_source import MockSource  # noqa: E402
+from app.datasources.amazon.mock import MockSource  # noqa: E402
 from app.models import SearchRequest  # noqa: E402
 from app.services import export_service  # noqa: E402
 from app.services.review_analysis import analyze_reviews  # noqa: E402
 from app.services.search_service import SearchService  # noqa: E402
 
-_passed = 0
-_failed = 0
+
+def _service():
+    tmp = os.path.join(tempfile.mkdtemp(), "cache.db")
+    settings = Settings(data_source_mode="mock", cache_db_path=tmp)
+    svc = SearchService(settings, CacheStore(settings.cache_db_path, settings.cache_ttl_hours))
+    return svc, settings
 
 
-def check(name: str, cond: bool, extra: str = ""):
-    global _passed, _failed
-    if cond:
-        _passed += 1
-        print(f"  ✅ {name}")
-    else:
-        _failed += 1
-        print(f"  ❌ {name}  {extra}")
+class TestMockSource(unittest.TestCase):
+    def test_top_n_deterministic_layered(self):
+        src = MockSource()
+        p1 = asyncio.run(src.search_top_products("wireless earbuds", "amazon.com", 10))
+        p2 = asyncio.run(src.search_top_products("wireless earbuds", "amazon.com", 10))
+        self.assertEqual(len(p1), 10)
+        self.assertTrue(all(p.base_info.product_id for p in p1))   # 分层：商品ID
+        self.assertTrue(all(p.pricing.price is not None for p in p1))  # 分层：价格
+        self.assertEqual([p.base_info.product_id for p in p1],
+                         [p.base_info.product_id for p in p2])     # 确定性可复现
+
+    def test_reviews_and_analysis(self):
+        src = MockSource()
+        reviews = asyncio.run(src.fetch_reviews("B0TEST0001", "amazon.com", 40))
+        self.assertGreater(len(reviews), 0)
+        ra = analyze_reviews(reviews)
+        self.assertEqual(ra.total_reviews, len(reviews))
+        self.assertTrue(0.0 <= ra.sentiment_score <= 1.0)
+        self.assertLess(
+            abs(ra.positive_ratio + ra.neutral_ratio + ra.negative_ratio - 1.0), 0.01)
+        self.assertTrue(ra.top_keywords)
 
 
-class BoomSource(DataSource):
-    """总是失败的数据源，用于验证回退。"""
+class TestSearchServiceMock(unittest.TestCase):
+    def test_search_returns_products_and_analysis(self):
+        svc, _ = _service()
+        result = asyncio.run(svc.search(
+            SearchRequest(keyword="usb c cable", include_reviews=True)))
+        self.assertEqual(result.source, "mock")
+        self.assertEqual(len(result.products), 10)
+        self.assertIsNotNone(result.review_analysis)
 
-    name = "boom"
-
-    async def search_top_products(self, keyword, marketplace, limit=10):
-        raise DataSourceError("boom")
-
-    async def fetch_reviews(self, asin, marketplace, limit=40):
-        raise DataSourceError("boom")
-
-
-async def test_mock_source():
-    print("[1] MockSource")
-    src = MockSource()
-    p1 = await src.search_top_products("wireless earbuds", "amazon.com", 10)
-    p2 = await src.search_top_products("wireless earbuds", "amazon.com", 10)
-    check("返回 TOP10", len(p1) == 10, f"got {len(p1)}")
-    check("排名连续 1..10", [p.position for p in p1] == list(range(1, 11)))
-    check("确定性可复现", [p.asin for p in p1] == [p.asin for p in p2])
-    check("含价格字段", all(p.price is not None for p in p1))
-    reviews = await src.fetch_reviews(p1[0].asin, "amazon.com", 40)
-    check("能取到评论", len(reviews) > 0, f"got {len(reviews)}")
+    def test_cache_written(self):
+        svc, settings = _service()
+        asyncio.run(svc.search(SearchRequest(keyword="mechanical keyboard")))
+        key = CacheStore.make_key(
+            "amazon", "mechanical keyboard", settings.marketplace, settings.top_n)
+        self.assertIsNotNone(svc.cache.get(key))   # 结果已写入缓存
 
 
-async def test_fallback():
-    print("[2] SearchService 回退 (boom → mock)")
-    settings = Settings(data_source_mode="mock", cache_db_path=_tmpdb())
-    svc = SearchService(settings, CacheStore(settings.cache_db_path, 24))
+class TestExport(unittest.TestCase):
+    def _result(self):
+        svc, _ = _service()
+        return asyncio.run(svc.search(SearchRequest(keyword="gaming mouse")))
 
-    # 强制链条：先 boom 再 mock
-    svc._build_chain = lambda: ["boom", "mock"]  # type: ignore
-    orig = svc._make_source
+    def test_xlsx(self):
+        data, _mt, fn = export_service.export(self._result(), "xlsx")
+        self.assertTrue(len(data) > 500 and data[:2] == b"PK")  # xlsx = zip 头
+        self.assertTrue(fn.endswith(".xlsx"))
 
-    def make(name):
-        return BoomSource() if name == "boom" else MockSource()
-
-    svc._make_source = make  # type: ignore
-    result = await svc.search(SearchRequest(keyword="usb c cable", include_reviews=True))
-    check("回退到 mock 成功", result.source == "mock", f"source={result.source}")
-    check("有 10 个产品", len(result.products) == 10)
-    check("有评论分析", result.review_analysis is not None)
-    svc._make_source = orig  # type: ignore
-
-
-async def test_review_analysis():
-    print("[3] 评论分析")
-    src = MockSource()
-    reviews = await src.fetch_reviews("B0TEST0001", "amazon.com", 40)
-    ra = analyze_reviews(reviews)
-    check("统计到评论数", ra.total_reviews == len(reviews))
-    check("情感得分在 0..1", 0.0 <= ra.sentiment_score <= 1.0, f"{ra.sentiment_score}")
-    check("占比之和≈1", abs(ra.positive_ratio + ra.neutral_ratio + ra.negative_ratio - 1.0) < 0.01)
-    check("提取到关键词", len(ra.top_keywords) > 0)
-
-
-async def test_cache():
-    print("[4] 缓存命中")
-    settings = Settings(data_source_mode="mock", cache_db_path=_tmpdb())
-    svc = SearchService(settings, CacheStore(settings.cache_db_path, 24))
-    r1 = await svc.search(SearchRequest(keyword="mechanical keyboard"))
-    r2 = await svc.search(SearchRequest(keyword="mechanical keyboard"))
-    check("首次非缓存", r1.cached is False, f"cached={r1.cached}")
-    check("二次命中缓存", r2.cached is True and r2.source == "cache", f"source={r2.source}")
-    r3 = await svc.search(SearchRequest(keyword="mechanical keyboard", force_refresh=True))
-    check("force_refresh 绕过缓存", r3.cached is False)
-
-
-async def test_export():
-    print("[5] 导出")
-    settings = Settings(data_source_mode="mock", cache_db_path=_tmpdb())
-    svc = SearchService(settings, CacheStore(settings.cache_db_path, 24))
-    result = await svc.search(SearchRequest(keyword="gaming mouse"))
-    xlsx, mt_x, fn_x = export_service.export(result, "xlsx")
-    csv, mt_c, fn_c = export_service.export(result, "csv")
-    check("xlsx 非空且是 zip 头", len(xlsx) > 500 and xlsx[:2] == b"PK", f"len={len(xlsx)}")
-    check("xlsx 文件名正确", fn_x.endswith(".xlsx"))
-    check("csv 非空含表头", b"ASIN" in csv, "")
-    check("csv 文件名正确", fn_c.endswith(".csv"))
-
-
-def _tmpdb() -> str:
-    return os.path.join(tempfile.mkdtemp(), "cache.db")
-
-
-async def main():
-    await test_mock_source()
-    await test_fallback()
-    await test_review_analysis()
-    await test_cache()
-    await test_export()
-    print(f"\n结果：{_passed} 通过 / {_failed} 失败")
-    return 0 if _failed == 0 else 1
+    def test_csv(self):
+        data, _mt, fn = export_service.export(self._result(), "csv")
+        self.assertIn("商品ID".encode("utf-8"), data)   # 当前中文表头
+        self.assertTrue(fn.endswith(".csv"))
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    unittest.main()

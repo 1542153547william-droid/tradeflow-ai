@@ -14,6 +14,8 @@ services:
       - QUERY_API_URL=http://query:8000
     depends_on:
       - query
+    volumes:
+      - tradeflow_data:/app/web/_store
     restart: unless-stopped
 
   query:
@@ -24,6 +26,16 @@ services:
     # the tool then returns an error. mock = offline sample data; api = Rainforest.
     environment:
       - DATA_SOURCE_MODE=scraper
+      - ALLOW_MOCK_FALLBACK=false
+      - TOP_N=5
+      - CACHE_TTL_HOURS=24
+      - SCRAPER_MIN_DELAY=5
+      - SCRAPER_MAX_DELAY=10
+      - SCRAPER_FETCH_BRAND=false
+      - SCRAPER_FETCH_QA=false
     expose:
       - "8000"
     restart: unless-stopped
+
+volumes:
+  tradeflow_data:

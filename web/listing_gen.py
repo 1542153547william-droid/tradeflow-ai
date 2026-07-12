@@ -15,6 +15,7 @@ from tradeflow.factory import build_provider
 from tradeflow.llm.base import Message, Role
 from tradeflow.tools.compliance import compliance_gate
 from tradeflow.tools.listing import inject_keywords
+from web.contracts import ListingContract
 
 _SYS = (
     "你是资深亚马逊 Listing 文案专家。只输出一个 JSON 对象，不要任何解释、前后缀或 markdown 代码块围栏。"
@@ -63,6 +64,21 @@ def generate_listing(name: str, category: str = "", site: str = "US") -> Dict[st
     except Exception:  # noqa: BLE001 —— 模型失败也要给可用兜底，别把接口打崩
         text = ""
     data = _extract_json(text)
+    validated = None
+    try:
+        validated = ListingContract.model_validate(data)
+    except Exception:
+        if text:
+            repair = ("下面输出未通过 JSON Schema。只重新输出修复后的 JSON，不要解释。"
+                      f"\n原输出：{text[:6000]}")
+            try:
+                fixed = build_provider().complete(
+                    messages=[Message(role=Role.USER, content=repair)],
+                    tools=None, system=_SYS).text
+                validated = ListingContract.model_validate(_extract_json(fixed))
+            except Exception:
+                validated = None
+    data = validated.model_dump() if validated else {}
 
     title = str(data.get("title") or f"{name} - Premium Quality for Everyday Use").strip()
 
@@ -85,6 +101,7 @@ def generate_listing(name: str, category: str = "", site: str = "US") -> Dict[st
         "title": title, "bullets": bullets,
         "description": description, "keywords": keywords,
         "candidates": candidates,
-        "model_ok": bool(data),          # 模型是否吐出可解析 JSON（否则用了兜底）
+        "model_ok": bool(validated),
+        "data_source": "model+keyword_table" if validated else "deterministic_fallback",
         "compliance": compliance,
     }

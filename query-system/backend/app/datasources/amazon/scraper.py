@@ -335,6 +335,16 @@ class ScraperSource(DataSource):
                 await self._debug_shot(page, f"detail_blocked_{pid}")
                 return
 
+            # 标题 / 价格 / 评分 / 评论数：列表页(search_top_products)才有；
+            # 按 ASIN 直接进详情页(fetch_product)时列表数据缺席，在此补全。
+            if not product.base_info.title:
+                product.base_info.title = await self._detail_title(page) or ""
+            await self._detail_pricing(page, product, marketplace)
+            if product.base_info.rating is None:
+                product.base_info.rating = await self._detail_rating(page)
+            if product.base_info.review_count is None:
+                product.base_info.review_count = await self._detail_review_count(page)
+
             # 品牌（byline）
             if not product.base_info.brand:
                 product.base_info.brand = await self._detail_brand(page)
@@ -546,6 +556,79 @@ class ScraperSource(DataSource):
             return None
         t = (await el.inner_text()).strip()
         return t or None
+
+    async def _detail_title(self, page) -> Optional[str]:
+        el = await page.query_selector("#productTitle, #title span#productTitle")
+        if not el:
+            return None
+        t = (await el.inner_text()).strip()
+        return t or None
+
+    async def _detail_pricing(self, page, product, marketplace: str) -> None:
+        """详情页解析现价 + 划线价（含币种/折扣）。兼容多套价格容器。"""
+        currency = _MARKET_CURRENCY.get(marketplace, "USD")
+        price_text = None
+        for sel in (
+            "#corePriceDisplay_desktop_feature_div span.a-price:not(.a-text-price) span.a-offscreen",
+            "#corePrice_feature_div span.a-price span.a-offscreen",
+            "#apex_desktop span.a-price:not(.a-text-price) span.a-offscreen",
+            "#price_inside_buybox", "#priceblock_ourprice", "#priceblock_dealprice",
+            "span.a-price span.a-offscreen",
+        ):
+            el = await page.query_selector(sel)
+            if el:
+                price_text = (await el.text_content() or "").strip()
+                if price_text:
+                    break
+        if price_text:
+            product.pricing.price = _parse_money(price_text)
+            product.pricing.currency = _parse_currency(price_text, currency)
+        # 划线价（原价）+ 折扣
+        for sel in (
+            "#corePriceDisplay_desktop_feature_div span.a-price.a-text-price span.a-offscreen",
+            "span.a-price.a-text-price span.a-offscreen", "#listPrice",
+        ):
+            el = await page.query_selector(sel)
+            if el:
+                lp = _parse_money(await el.text_content() or "")
+                if lp and product.pricing.price and lp > product.pricing.price:
+                    product.pricing.list_price = lp
+                    product.pricing.discount_pct = round(
+                        (1 - product.pricing.price / lp) * 100, 1)
+                break
+
+    @staticmethod
+    def _rating_from_text(text: str) -> Optional[float]:
+        """从评分文本取星级，兼容日文『5つ星のうち4.3』与英文『4.3 out of 5 stars』。"""
+        for pat in (r"のうち\s*([\d.]+)", r"([\d.]+)\s*out of\s*5", r"([\d.]+)\s*/\s*5"):
+            m = re.search(pat, text)
+            if m:
+                return float(m.group(1))
+        for n in re.findall(r"\d+\.\d+", text):  # 兜底：取首个 ≤5 的小数
+            if float(n) <= 5:
+                return float(n)
+        return None
+
+    async def _detail_rating(self, page) -> Optional[float]:
+        for sel in ("#acrPopover", "#averageCustomerReviews i.a-icon-star span.a-icon-alt",
+                    "span[data-hook='rating-out-of-text']", "i.a-icon-star span.a-icon-alt"):
+            el = await page.query_selector(sel)
+            if not el:
+                continue
+            text = (await el.get_attribute("title")) or (await el.inner_text()) or ""
+            r = self._rating_from_text(text)
+            if r is not None:
+                return r
+        return None
+
+    async def _detail_review_count(self, page) -> Optional[int]:
+        for sel in ("#acrCustomerReviewText", "[data-hook='total-review-count']"):
+            el = await page.query_selector(sel)
+            if el:
+                m = re.search(r"[\d,]+", await el.inner_text())
+                if m:
+                    return int(m.group().replace(",", ""))
+        return None
 
     async def _detail_brand(self, page) -> Optional[str]:
         el = await page.query_selector("#bylineInfo")

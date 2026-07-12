@@ -30,6 +30,9 @@ class Settings:
     max_tokens: int = int(os.environ.get("TRADEFLOW_MAX_TOKENS", "4096"))
     # "mock" until keys/params are wired; flip to "anthropic" to go live.
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
+    api_token: Optional[str] = os.environ.get("TRADEFLOW_API_TOKEN")
+    basic_auth_user: Optional[str] = os.environ.get("TRADEFLOW_BASIC_USER")
+    basic_auth_password: Optional[str] = os.environ.get("TRADEFLOW_BASIC_PASSWORD")
     # 商品查询系统（独立 HTTP 服务，不是 amazon.com）的地址，供 tools/amazon.py 调用。
     query_api_url: str = os.environ.get("QUERY_API_URL", "http://127.0.0.1:8000")
     # Alibaba Bailian / DashScope (Qwen) — OpenAI-compatible, works from mainland.
