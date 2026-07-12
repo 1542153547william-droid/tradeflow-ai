@@ -80,6 +80,13 @@ def _normalize_filters(batch: Dict[str, Any], filters: Dict[str, Any]) -> Dict[s
     return {_field_name(batch, key): value for key, value in (filters or {}).items()}
 
 
+def _invalid_group_value(field: str, value: Any) -> bool:
+    if value in (None, ""):
+        return True
+    text_id_fields = {"asin", "sku", "search_term", "campaign", "order_id"}
+    return field in text_id_fields and _num(value) is not None
+
+
 def build_import_tools(user_id: str, store_id: str):
     @tool
     def list_imported_files() -> dict:
@@ -159,7 +166,13 @@ def build_import_tools(user_id: str, store_id: str):
             group_by = "__all__"
         groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for row in data:
-            groups[str(row.get(group_by, "全部")) if group_by != "__all__" else "全部"].append(row)
+            if group_by == "__all__":
+                groups["全部"].append(row)
+                continue
+            value = row.get(group_by)
+            if _invalid_group_value(group_by, value):
+                continue
+            groups[str(value)].append(row)
         out = []
         for name, rows in groups.items():
             item: Dict[str, Any] = {group_by if group_by != "__all__" else "group": name, "rows": len(rows)}
@@ -187,7 +200,7 @@ def build_import_tools(user_id: str, store_id: str):
                     item[col] = round(sum(vals), 4)
             out.append(item)
         if sort_by:
-            out.sort(key=lambda x: (x.get(sort_by) is None, x.get(sort_by) or 0), reverse=True)
+            out.sort(key=lambda x: (x.get(sort_by) is not None, x.get(sort_by) or 0), reverse=True)
         return {"batch_id": batch["id"], "filename": batch["filename"], "groups": out[:max(1, min(limit, 200))]}
 
     return [list_imported_files, inspect_imported_file, sample_imported_rows, aggregate_imported_file]

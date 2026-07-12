@@ -118,6 +118,7 @@ class TestTenantPersistence(unittest.TestCase):
             {"SKU": "A-1", "Quantity": 2, "Sales": 40},
             {"SKU": "A-1", "Quantity": 3, "Sales": 60},
             {"SKU": "B-2", "Quantity": 1, "Sales": 25},
+            {"SKU": 999, "Quantity": "", "Sales": ""},
         ]
         saved = save_import("default", "default", "orders.xlsx", list(mapping), rows, mapping)
         tools = {t.name: t for t in build_import_tools("default", "default")}
