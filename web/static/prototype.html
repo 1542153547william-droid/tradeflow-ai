@@ -600,7 +600,7 @@ button.imgbox{font-family:inherit}
     desc:'High-quality '+nm+' designed to solve real customer pain points, with keyword-rich copy ready for Amazon.',
     kw:[String(nm).toLowerCase(),'best seller alternative','gift idea','durable '+ct]};}
 
-  let selected=null, started=false;
+  let selected=null, started=false, chatHistory=[];
   const AV_A='<div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></div>';
 
   function ensureStarted(){if(!started){started=true;$('#hello').remove();}}
@@ -610,6 +610,12 @@ button.imgbox{font-family:inherit}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
   function scrollDown(){requestAnimationFrame(()=>scroll.scrollTop=scroll.scrollHeight);}
+  function remember(role,content){
+    const text=String(content||'').replace(/\s+/g,' ').trim();
+    if(!text)return;
+    chatHistory.push({role,content:text.slice(0,4000)});
+    if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
+  }
 
   function thinking(label,then){
     const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'+label+'</div></div>');
@@ -702,6 +708,7 @@ button.imgbox{font-family:inherit}
     return h.replace(/\n/g,'<br>');}
   async function respondReal(text){
     const agent=chosenAgent(text);
+    const history=chatHistory.slice(-8);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
@@ -711,7 +718,7 @@ button.imgbox{font-family:inherit}
     const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
       if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
       const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
       while(true){
@@ -736,6 +743,7 @@ button.imgbox{font-family:inherit}
           }else if(evt.type==='final'){
             gotFinal=true;
             const full=evt.reply||raw;
+            remember('assistant',full);
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
             if(ans){ans.querySelector('.bubble').innerHTML='<div>'+fmt(full)+'</div>'+badge;}
             else{if(think)think.remove();addAgent('<div class="bubble"><div>'+fmt(full)+'</div>'+badge+'</div>');}
@@ -749,8 +757,9 @@ button.imgbox{font-family:inherit}
       if(!gotFinal)throw new Error('流式连接中断（无 final 事件）');
     }catch(e){
       if(ans)ans.remove();if(think)think.remove();
-      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
         if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+        remember('assistant',d.reply);
         const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
         const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">兼容模式 · 调用工具：${esc(tools.join(', '))}</div>`:'';
         addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
@@ -794,8 +803,9 @@ button.imgbox{font-family:inherit}
   }
 
   /* input handling */
-  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();
-    if(chosenAgent(text)==='selection')respondSelection(text.trim());else respondReal(text.trim());}
+  function submitInput(text){const clean=text.trim();if(!clean)return;addUser(clean);$('#chatInp').value='';autosize();
+    if(chosenAgent(clean)==='selection'){remember('user',clean);respondSelection(clean);}
+    else{respondReal(clean);remember('user',clean);}}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
@@ -809,7 +819,7 @@ button.imgbox{font-family:inherit}
     const ai=e.target.closest('.addImg');if(ai){addImgFromChat(ai.dataset.k,decodeURIComponent(ai.dataset.bg),ai.dataset.role);return;}
     const gi=e.target.closest('.gotoImg');if(gi){go('listing');openEditor(opps.find(o=>o.key===gi.dataset.k)||{...OPP[gi.dataset.k]});return;}
   });
-  $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;location.reload();};
+  $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;chatHistory=[];location.reload();};
 
   /* ---------- module: 机会上新（后端持久化 CRUD，B1） ---------- */
   let opps=[];

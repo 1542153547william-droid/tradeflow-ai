@@ -32,6 +32,7 @@ from tradeflow import registry  # noqa: E402
 from tradeflow.agent.loop import AgentStep  # noqa: E402
 from tradeflow.compose import compose_system_prompt  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
+from tradeflow.llm.base import Message, Role  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
@@ -120,9 +121,15 @@ def _build_agent(agent_key: str, observer):
     return build_agent(observer=observer)
 
 
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
 class ChatIn(BaseModel):
     message: str
     agent: str = "default"
+    history: List[ChatTurn] = []
 
 
 class ChatOut(BaseModel):
@@ -132,8 +139,22 @@ class ChatOut(BaseModel):
     steps: List[Dict[str, Any]]
 
 
-def _imported_report_chat_context(message: str, user_id: str, store_id: str) -> str | None:
-    text = message.lower()
+def _history_text(history: List[ChatTurn]) -> str:
+    return "\n".join(f"{h.role}: {h.content}" for h in history[-8:])
+
+
+def _to_messages(history: List[ChatTurn]) -> List[Message]:
+    messages: List[Message] = []
+    for item in history[-8:]:
+        role = Role.ASSISTANT if item.role == "assistant" else Role.USER
+        if item.content.strip():
+            messages.append(Message(role=role, content=item.content[-4000:]))
+    return messages
+
+
+def _imported_report_chat_context(message: str, user_id: str, store_id: str,
+                                  history: List[ChatTurn] | None = None) -> str | None:
+    text = (message + "\n" + _history_text(history or [])).lower()
     asks_ads = any(k in text for k in ("广告", "acos", "竞价", "否词", "否定", "加预算", "降价", "搜索词"))
     asks_imported = any(k in text for k in ("导入", "报表", "刚上传", "刚导", "excel", "xlsx", "csv"))
     if not (asks_ads and asks_imported):
@@ -156,8 +177,10 @@ def _build_imported_ads_agent(observer=None):
     return build_agent(system_prompt=prompt, tools=[], observer=observer)
 
 
-def _imported_ads_user_input(original_message: str, context: str) -> str:
+def _imported_ads_user_input(original_message: str, context: str, history: List[ChatTurn]) -> str:
+    history_block = _history_text(history)
     return (
+        f"最近对话上下文：\n{history_block or '（无）'}\n\n"
         f"用户原始问题：{original_message}\n\n"
         f"{context}\n\n"
         "请基于上面的真实导入数据回答用户问题。"
@@ -303,12 +326,13 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
             "tools": step.tool_calls,
         })
 
-    imported_context = _imported_report_chat_context(body.message, x_tradeflow_user, x_tradeflow_store)
+    imported_context = _imported_report_chat_context(
+        body.message, x_tradeflow_user, x_tradeflow_store, body.history)
     if imported_context:
         if imported_context.startswith("我还没有读到"):
             return ChatOut(reply=imported_context, iterations=0, stopped_early=False, steps=[])
         result = _build_imported_ads_agent(observe).run(
-            _imported_ads_user_input(body.message, imported_context))
+            _imported_ads_user_input(body.message, imported_context, body.history))
         return ChatOut(
             reply=result.output,
             iterations=result.iterations,
@@ -318,7 +342,7 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
 
     # Fresh agent per request → clean, single-turn conversations (no shared state).
     agent = _build_agent(body.agent, observe)
-    result = agent.run(body.message)
+    result = agent.run(body.message, history=_to_messages(body.history))
     return ChatOut(
         reply=result.output,
         iterations=result.iterations,
@@ -349,17 +373,20 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
 
     def run_agent() -> None:
         try:
-            imported_context = _imported_report_chat_context(body.message, x_tradeflow_user, x_tradeflow_store)
+            imported_context = _imported_report_chat_context(
+                body.message, x_tradeflow_user, x_tradeflow_store, body.history)
             if imported_context and imported_context.startswith("我还没有读到"):
                 push({"type": "final", "reply": imported_context, "iterations": 0, "stopped_early": False})
                 return
             if imported_context:
                 agent = _build_imported_ads_agent(lambda _step: None)
-                user_input = _imported_ads_user_input(body.message, imported_context)
+                user_input = _imported_ads_user_input(body.message, imported_context, body.history)
+                history = None
             else:
                 agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
                 user_input = body.message
-            for kind, payload in agent.run_stream(user_input):
+                history = _to_messages(body.history)
+            for kind, payload in agent.run_stream(user_input, history=history):
                 if kind == "token":
                     push({"type": "token", "text": payload})
                 elif kind == "reset":
