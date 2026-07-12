@@ -1,6 +1,7 @@
 import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -34,6 +35,27 @@ class TestImportParsing(unittest.TestCase):
         columns, rows = parse_upload("inventory.xlsx", buf.getvalue())
         self.assertEqual(columns, ["SKU", "Stock"])
         self.assertEqual(rows[0]["SKU"], "A-1")
+
+    def test_xlsx_with_broken_dimension_declaration(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["广告活动名称", "客户搜索词", "展示量", "点击量", "花费", "7天总销售额"])
+        ws.append(["Campaign", "silicone mat", 100, 5, 10, 40])
+        original = io.BytesIO()
+        wb.save(original)
+
+        broken = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(original.getvalue())) as source, zipfile.ZipFile(broken, "w") as target:
+            for info in source.infolist():
+                data = source.read(info.filename)
+                if info.filename == "xl/worksheets/sheet1.xml":
+                    data = data.replace(b'<dimension ref="A1:F2"/>', b'<dimension ref="A1:A1"/>')
+                target.writestr(info, data)
+
+        columns, rows = parse_upload("amazon-export.xlsx", broken.getvalue())
+        self.assertEqual(len(columns), 6)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["客户搜索词"], "silicone mat")
 
 
 class TestTenantPersistence(unittest.TestCase):

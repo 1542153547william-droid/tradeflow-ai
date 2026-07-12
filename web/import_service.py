@@ -66,7 +66,11 @@ def parse_upload(filename: str, content: bytes) -> tuple[list[str], list[dict[st
         rows = list(csv.reader(io.StringIO(text)))
     elif lower.endswith((".xlsx", ".xlsm")):
         from openpyxl import load_workbook
-        wb = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+        # Amazon exports occasionally declare a broken worksheet dimension
+        # (for example A1:A1 although thousands of cells exist). read_only mode
+        # trusts that declaration and silently returns one cell, so use full
+        # mode here to discover the actual populated range.
+        wb = load_workbook(io.BytesIO(content), data_only=True, read_only=False)
         rows = []
         for ws in wb.worksheets:
             sheet_rows = [list(r) for r in ws.iter_rows(values_only=True)]
