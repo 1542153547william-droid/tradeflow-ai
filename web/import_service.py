@@ -128,13 +128,24 @@ def list_imports(user_id: str, store_id: str) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
+def _latest_imported_rows(user_id: str, store_id: str, report_type: str) -> list[dict[str, Any]]:
     with connect() as db:
+        batch = db.execute(
+            "SELECT id FROM import_batches WHERE user_id=? AND store_id=? AND report_type=? "
+            "AND status='completed' AND row_count>0 ORDER BY created_at DESC, id DESC LIMIT 1",
+            (user_id, store_id, report_type),
+        ).fetchone()
+        if not batch:
+            return []
         rows = db.execute(
-            "SELECT r.row_json FROM imported_rows r JOIN import_batches b ON b.id=r.batch_id WHERE r.user_id=? AND r.store_id=? AND b.report_type='ads_search_terms'",
-            (user_id, store_id),
+            "SELECT row_json FROM imported_rows WHERE user_id=? AND store_id=? AND batch_id=?",
+            (user_id, store_id, batch["id"]),
         ).fetchall()
-    data = [json.loads(r[0]) for r in rows]
+    return [json.loads(r[0]) for r in rows]
+
+
+def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
+    data = _latest_imported_rows(user_id, store_id, "ads_search_terms")
     if not data:
         return {"items": [], "error": "请先导入真实广告搜索词报表"}
     campaigns: dict[str, dict[str, Any]] = {}
@@ -163,13 +174,7 @@ def ads_chat_analysis(user_id: str, store_id: str) -> str | None:
     The regular agent tools read files from data/ads. Imported user reports live
     in SQLite, so chat needs this bridge to avoid claiming that no report exists.
     """
-    with connect() as db:
-        rows = db.execute(
-            "SELECT r.row_json FROM imported_rows r JOIN import_batches b ON b.id=r.batch_id "
-            "WHERE r.user_id=? AND r.store_id=? AND b.report_type='ads_search_terms'",
-            (user_id, store_id),
-        ).fetchall()
-    data = [json.loads(r[0]) for r in rows]
+    data = _latest_imported_rows(user_id, store_id, "ads_search_terms")
     if not data:
         return None
 
@@ -296,6 +301,7 @@ def ads_chat_context(user_id: str, store_id: str) -> str | None:
         f"{analysis}\n\n"
         "回答要求：根据用户具体问题选择分析角度；如果用户只笼统要求分析，"
         "请给出最重要的 3-5 条可执行动作，并说明依据、风险和下一步。"
+        "不要自行更改币种或把金额翻倍；不要引用上下文里没有提供的规则表参数。"
     )
 
 
