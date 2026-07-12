@@ -188,6 +188,28 @@ def _imported_ads_user_input(original_message: str, context: str, history: List[
     )
 
 
+def _sanitize_imported_ads_reply(reply: str) -> str:
+    replacements = {
+        "实质性亏损性花费": "高风险广告花费",
+        "明确亏损": "ACOS 明显偏高",
+        "实际已亏": "存在明显广告效率风险",
+        "典型的「负向 ROI」活动": "典型的低效广告活动",
+        "负向 ROI": "低效 ROI",
+        "每单广告净亏": "单均广告花费偏高",
+        "净亏": "广告花费偏高",
+        "亏损型活动": "高 ACOS 活动",
+        "亏损活动": "高 ACOS 活动",
+        "亏损性": "高风险",
+        "亏损": "高风险消耗",
+        "花出去的钱比赚回来的多": "广告花费高于广告归因销售额",
+        "花费比销售额还高": "广告花费高于广告归因销售额",
+    }
+    out = reply
+    for src, dst in replacements.items():
+        out = out.replace(src, dst)
+    return out
+
+
 @app.get("/")
 def index() -> FileResponse:
     # 新的完整产品原型页（对话已接后端；机会上新等模块仍在接入中）。
@@ -335,7 +357,7 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
         result = _build_imported_ads_agent(observe).run(
             _imported_ads_user_input(body.message, imported_context, body.history))
         return ChatOut(
-            reply=result.output,
+            reply=_sanitize_imported_ads_reply(result.output),
             iterations=result.iterations,
             stopped_early=result.stopped_early,
             steps=steps,
@@ -396,7 +418,8 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
                     push({"type": "status", "tools": payload,
                           "message": "正在调用工具：" + "、".join(payload) + " …"})
                 elif kind == "final":
-                    push({"type": "final", "reply": payload.output,
+                    reply = _sanitize_imported_ads_reply(payload.output) if imported_context else payload.output
+                    push({"type": "final", "reply": reply,
                           "iterations": payload.iterations,
                           "stopped_early": payload.stopped_early})
         except Exception as exc:  # noqa: BLE001 —— 把错误推给前端而非静默
