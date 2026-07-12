@@ -10,7 +10,7 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, get_type_hints
+from typing import Any, Callable, Dict, List, Optional, Union, get_args, get_origin, get_type_hints
 
 
 _PY_TO_JSON = {
@@ -24,6 +24,14 @@ _PY_TO_JSON = {
 
 
 def _json_type(py_type: Any) -> str:
+    origin = get_origin(py_type)
+    if origin is Union:
+        non_null = [t for t in get_args(py_type) if t is not type(None)]
+        return _json_type(non_null[0]) if non_null else "string"
+    if origin in (list, List):
+        return "array"
+    if origin in (dict, Dict):
+        return "object"
     return _PY_TO_JSON.get(py_type, "string")
 
 

@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 import zipfile
@@ -11,6 +12,7 @@ from tradeflow.registry import get_spec
 from web import database, store
 from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
+from web.import_tools import build_import_tools
 
 
 class TestImportParsing(unittest.TestCase):
@@ -110,6 +112,29 @@ class TestTenantPersistence(unittest.TestCase):
         self.assertEqual(saved["report_type"], "competitors")
         self.assertEqual(competitor_rows("default", "default")[0]["asin"], "B001")
 
+    def test_import_tools_can_analyze_non_ads_files(self):
+        mapping = {"SKU": "sku", "Quantity": "quantity", "Sales": "sales"}
+        rows = [
+            {"SKU": "A-1", "Quantity": 2, "Sales": 40},
+            {"SKU": "A-1", "Quantity": 3, "Sales": 60},
+            {"SKU": "B-2", "Quantity": 1, "Sales": 25},
+        ]
+        saved = save_import("default", "default", "orders.xlsx", list(mapping), rows, mapping)
+        tools = {t.name: t for t in build_import_tools("default", "default")}
+
+        files = json.loads(tools["list_imported_files"].run({}))
+        self.assertEqual(files["items"][0]["filename"], "orders.xlsx")
+
+        result = json.loads(tools["aggregate_imported_file"].run({
+            "batch_id": saved["id"],
+            "group_by": "SKU",
+            "metrics": {"Quantity": "sum", "Sales": "sum"},
+            "sort_by": "Sales",
+        }))
+        self.assertEqual(result["groups"][0]["sku"], "A-1")
+        self.assertEqual(result["groups"][0]["quantity"], 5)
+        self.assertEqual(result["groups"][0]["sales"], 100)
+
 
 class TestPromptAndTools(unittest.TestCase):
     def test_base_prompt_has_p0_guardrails(self):
@@ -122,6 +147,14 @@ class TestPromptAndTools(unittest.TestCase):
         for name in ("listing", "teardown", "market", "selection"):
             tools = {t.name for t in get_spec(name).tools}
             self.assertIn("search_products", tools)
+
+    def test_import_tool_schema_exposes_object_arguments(self):
+        tools = {t.name: t for t in build_import_tools("default", "default")}
+        sample_props = tools["sample_imported_rows"].parameters["properties"]
+        aggregate_props = tools["aggregate_imported_file"].parameters["properties"]
+        self.assertEqual(sample_props["filters"]["type"], "object")
+        self.assertEqual(aggregate_props["filters"]["type"], "object")
+        self.assertEqual(aggregate_props["metrics"]["type"], "object")
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ import threading  # noqa: E402
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 from config.settings import settings  # noqa: E402
 from tradeflow import registry  # noqa: E402
@@ -35,6 +35,7 @@ from tradeflow.factory import build_agent  # noqa: E402
 from tradeflow.llm.base import Message, Role  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
+from web.import_tools import build_import_tools  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
@@ -129,7 +130,7 @@ class ChatTurn(BaseModel):
 class ChatIn(BaseModel):
     message: str
     agent: str = "default"
-    history: List[ChatTurn] = []
+    history: List[ChatTurn] = Field(default_factory=list)
 
 
 class ChatOut(BaseModel):
@@ -208,6 +209,45 @@ def _sanitize_imported_ads_reply(reply: str) -> str:
     for src, dst in replacements.items():
         out = out.replace(src, dst)
     return out
+
+
+def _is_import_data_query(message: str, history: List[ChatTurn] | None = None) -> bool:
+    text = (message + "\n" + _history_text(history or [])).lower()
+    return any(k in text for k in (
+        "导入", "报表", "文件", "excel", "xlsx", "csv", "刚上传", "刚导",
+        "数据", "订单", "库存", "广告", "acos", "搜索词", "sku", "第二个", "继续",
+    ))
+
+
+def _build_import_data_agent(user_id: str, store_id: str, observer=None):
+    prompt = (
+        "你是 TradeFlow-AI 的通用导入数据分析智能体。用户上传的 Excel/CSV 已经入库，"
+        "你不能假设只分析某一种文件，也不能声称没有收到文件，除非工具返回确实没有数据。\n\n"
+        "工作方式：\n"
+        "1. 根据用户问题和最近对话，自己决定调用哪些工具。\n"
+        "2. 不知道有哪些文件时，先调用 list_imported_files。\n"
+        "3. 不知道字段含义时，调用 inspect_imported_file 看字段、样例和数字列概览。\n"
+        "4. 需要汇总排行、分组对比、筛选明细时，调用 aggregate_imported_file 或 sample_imported_rows。\n"
+        "5. 工具结果不足以回答时，可以继续调用工具；足够时再结束。\n\n"
+        "边界：只基于工具返回的真实导入数据。金额没有币种时不要加币种。"
+        "销售额不是利润；没有成本、毛利、回款率时不要计算利润/亏损金额。"
+        "可以说 ACOS 高、广告效率风险高、花费高于广告归因销售额，但不要说明确亏损。"
+        "回答要贴近用户 query；用户追问“第二个/继续/为什么”时，要结合最近对话上下文理解指代。"
+    )
+    return build_agent(
+        system_prompt=prompt,
+        tools=build_import_tools(user_id, store_id),
+        observer=observer,
+        max_iterations=8,
+    )
+
+
+def _import_data_user_input(message: str, history: List[ChatTurn]) -> str:
+    return (
+        f"最近对话上下文：\n{_history_text(history) or '（无）'}\n\n"
+        f"用户当前问题：{message}\n\n"
+        "请按需调用导入数据工具进行实时分析。"
+    )
 
 
 @app.get("/")
@@ -349,13 +389,9 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
             "tools": step.tool_calls,
         })
 
-    imported_context = _imported_report_chat_context(
-        body.message, x_tradeflow_user, x_tradeflow_store, body.history)
-    if imported_context:
-        if imported_context.startswith("我还没有读到"):
-            return ChatOut(reply=imported_context, iterations=0, stopped_early=False, steps=[])
-        result = _build_imported_ads_agent(observe).run(
-            _imported_ads_user_input(body.message, imported_context, body.history))
+    if _is_import_data_query(body.message, body.history):
+        result = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, observe).run(
+            _import_data_user_input(body.message, body.history))
         return ChatOut(
             reply=_sanitize_imported_ads_reply(result.output),
             iterations=result.iterations,
@@ -396,14 +432,10 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
 
     def run_agent() -> None:
         try:
-            imported_context = _imported_report_chat_context(
-                body.message, x_tradeflow_user, x_tradeflow_store, body.history)
-            if imported_context and imported_context.startswith("我还没有读到"):
-                push({"type": "final", "reply": imported_context, "iterations": 0, "stopped_early": False})
-                return
-            if imported_context:
-                agent = _build_imported_ads_agent(lambda _step: None)
-                user_input = _imported_ads_user_input(body.message, imported_context, body.history)
+            is_import_query = _is_import_data_query(body.message, body.history)
+            if is_import_query:
+                agent = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, lambda _step: None)
+                user_input = _import_data_user_input(body.message, body.history)
                 history = None
             else:
                 agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
@@ -418,7 +450,7 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
                     push({"type": "status", "tools": payload,
                           "message": "正在调用工具：" + "、".join(payload) + " …"})
                 elif kind == "final":
-                    reply = _sanitize_imported_ads_reply(payload.output) if imported_context else payload.output
+                    reply = _sanitize_imported_ads_reply(payload.output) if is_import_query else payload.output
                     push({"type": "final", "reply": reply,
                           "iterations": payload.iterations,
                           "stopped_early": payload.stopped_early})
