@@ -680,6 +680,7 @@ button.imgbox{font-family:inherit}
   // 轻量意图路由：把请求分到对应的真智能体，其余走通用。顺序=从具体到宽泛。
   function pickAgent(q){q=(q||'').toLowerCase();
     if(/(合规|违规|禁词|极限词|审一?下|审核|侵权|能不能用|违禁)/.test(q))return 'compliance';
+    if(/(广告|acos|竞价|否词|否定词|加预算|降价|搜索词报表|广告报表|ppc|campaign|search term)/.test(q))return 'ads';
     if(/(拆解|拆一下|竞品|对标|爆款|逆向|asin|b0[0-9a-z]{8})/.test(q))return 'teardown';
     if(/(选品|机会商品|机会|值得做|要不要做|能不能做|挖|蓝海|选个?品)/.test(q))return 'selection';
     if(/(市场|类目|赛道|红海|竞争格局|体量|价格带|研判|大盘|供需)/.test(q))return 'market';
@@ -691,7 +692,7 @@ button.imgbox{font-family:inherit}
     return (v&&v!=='auto')?v:pickAgent(text);}
   // 智能体 key→中文名，初始给默认值，init 时用 /api/agents 覆盖为注册表真实展示名。
   let AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',
-    imagery:'#3 图文提示词',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
+    imagery:'#3 图文提示词',ads:'#4 广告优化',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
   // 把当前店铺/站点作为上下文带给后端（仅拼进发送内容，气泡仍只显示用户原话）。
   function storeContext(){const s=stores.find(x=>x.id===curStore);
     return s?`【店铺上下文：${s.name} · ${MK[s.mk]}站(${s.mk})】\n`:'';}

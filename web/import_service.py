@@ -285,6 +285,20 @@ def ads_chat_analysis(user_id: str, store_id: str) -> str | None:
     return "\n".join(lines)
 
 
+def ads_chat_context(user_id: str, store_id: str) -> str | None:
+    """Build a compact live data context for the ad agent to reason over."""
+    analysis = ads_chat_analysis(user_id, store_id)
+    if not analysis:
+        return None
+    return (
+        "以下是系统刚刚从用户已导入的广告搜索词报表中实时聚合出的真实数据摘要。"
+        "你必须基于这些数据回答，不要声称没有收到报表，不要使用样例或 Mock 数据。\n\n"
+        f"{analysis}\n\n"
+        "回答要求：根据用户具体问题选择分析角度；如果用户只笼统要求分析，"
+        "请给出最重要的 3-5 条可执行动作，并说明依据、风险和下一步。"
+    )
+
+
 def competitor_rows(user_id: str, store_id: str, limit: int = 20) -> list[dict[str, Any]]:
     """Return real competitor rows uploaded by this store, newest first."""
     with connect() as db:

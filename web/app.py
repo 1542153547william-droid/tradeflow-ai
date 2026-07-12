@@ -30,13 +30,14 @@ from pydantic import BaseModel  # noqa: E402
 from config.settings import settings  # noqa: E402
 from tradeflow import registry  # noqa: E402
 from tradeflow.agent.loop import AgentStep  # noqa: E402
+from tradeflow.compose import compose_system_prompt  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
-from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, list_imports,
+from web.import_service import (ads_chat_context, ads_overview, competitor_rows, list_imports,
                                 parse_upload, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
@@ -131,16 +132,34 @@ class ChatOut(BaseModel):
     steps: List[Dict[str, Any]]
 
 
-def _imported_report_chat_reply(message: str, user_id: str, store_id: str) -> str | None:
+def _imported_report_chat_context(message: str, user_id: str, store_id: str) -> str | None:
     text = message.lower()
     asks_ads = any(k in text for k in ("广告", "acos", "竞价", "否词", "否定", "加预算", "降价", "搜索词"))
     asks_imported = any(k in text for k in ("导入", "报表", "刚上传", "刚导", "excel", "xlsx", "csv"))
     if not (asks_ads and asks_imported):
         return None
-    reply = ads_chat_analysis(user_id, store_id)
-    if reply:
-        return reply
+    context = ads_chat_context(user_id, store_id)
+    if context:
+        return context
     return "我还没有读到已导入的广告搜索词报表。请先到「数据导入」上传广告报表，并确认字段映射后再让我分析。"
+
+
+def _build_imported_ads_agent(observer=None):
+    prompt = compose_system_prompt("ads") + (
+        "\n\n# 当前任务\n"
+        "用户正在通过对话分析已经上传并入库的广告报表。报表上下文会作为用户消息的一部分提供。"
+        "你要像真实广告优化师一样根据用户问题动态分析，而不是复述固定模板。"
+        "如果上下文中已有足够数据，直接给结论；如果缺少成本、毛利或目标 ACOS，则明确标注缺口。"
+    )
+    return build_agent(system_prompt=prompt, tools=[], observer=observer)
+
+
+def _imported_ads_user_input(original_message: str, context: str) -> str:
+    return (
+        f"用户原始问题：{original_message}\n\n"
+        f"{context}\n\n"
+        "请基于上面的真实导入数据回答用户问题。"
+    )
 
 
 @app.get("/")
@@ -272,10 +291,6 @@ def opportunities_suggest(body: OppSuggestIn,
 @app.post("/api/chat", response_model=ChatOut)
 def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
          x_tradeflow_store: str = Header(default="default")) -> ChatOut:
-    imported_reply = _imported_report_chat_reply(body.message, x_tradeflow_user, x_tradeflow_store)
-    if imported_reply:
-        return ChatOut(reply=imported_reply, iterations=0, stopped_early=False, steps=[])
-
     steps: List[Dict[str, Any]] = []
 
     def observe(step: AgentStep) -> None:
@@ -285,6 +300,19 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
             "text": step.text,
             "tools": step.tool_calls,
         })
+
+    imported_context = _imported_report_chat_context(body.message, x_tradeflow_user, x_tradeflow_store)
+    if imported_context:
+        if imported_context.startswith("我还没有读到"):
+            return ChatOut(reply=imported_context, iterations=0, stopped_early=False, steps=[])
+        result = _build_imported_ads_agent(observe).run(
+            _imported_ads_user_input(body.message, imported_context))
+        return ChatOut(
+            reply=result.output,
+            iterations=result.iterations,
+            stopped_early=result.stopped_early,
+            steps=steps,
+        )
 
     # Fresh agent per request → clean, single-turn conversations (no shared state).
     agent = _build_agent(body.agent, observe)
@@ -314,23 +342,22 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
     loop = asyncio.get_event_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
-    imported_reply = _imported_report_chat_reply(body.message, x_tradeflow_user, x_tradeflow_store)
-    if imported_reply:
-        async def imported_event_gen():
-            yield _sse({"type": "status", "iteration": 0, "message": "正在读取已导入报表并计算指标 …"})
-            yield _sse({"type": "final", "reply": imported_reply, "iterations": 0, "stopped_early": False})
-
-        return StreamingResponse(imported_event_gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache",
-                                          "X-Accel-Buffering": "no"})
-
     def push(evt: Dict[str, Any]) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, evt)
 
     def run_agent() -> None:
         try:
-            agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
-            for kind, payload in agent.run_stream(body.message):
+            imported_context = _imported_report_chat_context(body.message, x_tradeflow_user, x_tradeflow_store)
+            if imported_context and imported_context.startswith("我还没有读到"):
+                push({"type": "final", "reply": imported_context, "iterations": 0, "stopped_early": False})
+                return
+            if imported_context:
+                agent = _build_imported_ads_agent(lambda _step: None)
+                user_input = _imported_ads_user_input(body.message, imported_context)
+            else:
+                agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
+                user_input = body.message
+            for kind, payload in agent.run_stream(user_input):
                 if kind == "token":
                     push({"type": "token", "text": payload})
                 elif kind == "reset":
