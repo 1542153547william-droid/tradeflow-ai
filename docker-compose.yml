@@ -14,6 +14,8 @@ services:
       - QUERY_API_URL=http://query:8000
     depends_on:
       - query
+    volumes:
+      - tradeflow_data:/app/web/_store
     restart: unless-stopped
 
   query:
@@ -27,3 +29,6 @@ services:
     expose:
       - "8000"
     restart: unless-stopped
+
+volumes:
+  tradeflow_data:
