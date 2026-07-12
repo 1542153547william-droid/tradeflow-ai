@@ -173,6 +173,7 @@ def _build_imported_ads_agent(observer=None):
         "如果上下文中已有足够数据，直接给结论；如果缺少成本、毛利或目标 ACOS，则明确标注缺口。"
         "严禁引用未提供的规则表、阈值或币种；金额单位保持上下文原样。"
         "没有毛利、成本和目标 ACOS 时，不能计算利润/亏损金额，只能基于花费、销售额、订单和 ACOS 判断优先级。"
+        "销售额不是利润，禁止用 花费-销售额 或 ACOS>100% 直接声称明确亏损。"
     )
     return build_agent(system_prompt=prompt, tools=[], observer=observer)
 
