@@ -24,6 +24,10 @@ ALIASES = {
     "price": {"price", "价格", "售价"},
     "stock": {"stock", "库存", "库存数量"},
     "order_id": {"amazon-order-id", "order id", "订单号"},
+    "title": {"title", "product title", "商品标题", "标题"},
+    "rating": {"rating", "star rating", "评分", "星级"},
+    "review_count": {"review count", "reviews", "评论数", "评价数"},
+    "brand": {"brand", "品牌"},
 }
 
 
@@ -147,3 +151,15 @@ def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
         items.append(c)
     return {"items": sorted(items, key=lambda x: -x["spend"]), "source": "imported_report",
             "row_count": len(data)}
+
+
+def competitor_rows(user_id: str, store_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Return real competitor rows uploaded by this store, newest first."""
+    with connect() as db:
+        rows = db.execute(
+            "SELECT r.row_json FROM imported_rows r JOIN import_batches b ON b.id=r.batch_id "
+            "WHERE r.user_id=? AND r.store_id=? AND b.report_type='competitors' "
+            "ORDER BY r.id DESC LIMIT ?",
+            (user_id, store_id, limit),
+        ).fetchall()
+    return [json.loads(r[0]) for r in rows]

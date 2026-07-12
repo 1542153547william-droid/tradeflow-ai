@@ -953,7 +953,7 @@ button.imgbox{font-family:inherit}
     $('#tab-amazon').style.display=t.dataset.t==='amazon'?'':'none';$('#tab-excel').style.display=t.dataset.t==='excel'?'':'none';});
   $('#syncBtn').onclick=()=>toast('尚未配置 Amazon SP-API 授权，请使用 Excel 导入真实报表');
   let importPreview=null;
-  const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['price','价格'],['stock','库存'],['order_id','订单号']];
+  const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['title','商品标题'],['brand','品牌'],['price','价格'],['rating','评分'],['review_count','评论数'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['stock','库存'],['order_id','订单号']];
   $('#fileInp').onchange=async e=>{const file=e.target.files[0];if(!file)return;
     const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent=' · 正在解析…';
     try{const r=await fetch('/api/imports/preview',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));

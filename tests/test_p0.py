@@ -8,8 +8,8 @@ from openpyxl import Workbook
 from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
 from web import database, store
-from web.import_service import (ads_overview, detect_report_type, parse_upload,
-                                save_import, suggest_mapping)
+from web.import_service import (ads_overview, competitor_rows, detect_report_type,
+                                parse_upload, save_import, suggest_mapping)
 
 
 class TestImportParsing(unittest.TestCase):
@@ -63,6 +63,13 @@ class TestTenantPersistence(unittest.TestCase):
         result = ads_overview("default", "default")
         self.assertEqual(result["source"], "imported_report")
         self.assertEqual(result["items"][0]["acos"], 0.25)
+
+    def test_competitor_import_can_drive_offline_flow(self):
+        mapping = {"ASIN": "asin", "Title": "title", "Price": "price", "Rating": "rating"}
+        rows = [{"ASIN": "B001", "Title": "Silicone Mat", "Price": 19.99, "Rating": 4.6}]
+        saved = save_import("default", "default", "competitors.xlsx", list(mapping), rows, mapping)
+        self.assertEqual(saved["report_type"], "competitors")
+        self.assertEqual(competitor_rows("default", "default")[0]["asin"], "B001")
 
 
 class TestPromptAndTools(unittest.TestCase):

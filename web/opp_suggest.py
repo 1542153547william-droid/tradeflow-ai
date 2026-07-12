@@ -43,15 +43,21 @@ def _extract_json_array(text: str) -> List[Any]:
         return []
 
 
-def suggest_opportunities(query: str, top_n: int = 4) -> Dict[str, Any]:
+def suggest_opportunities(query: str, top_n: int = 4,
+                          imported_products: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     market = search_products.func(query, "amazon", min(max(top_n * 2, 3), 20), "amazon.com", False)
     if market.get("error"):
-        return {"query": query, "items": [], "model_ok": False,
-                "data_source": "unavailable", "error": market["error"]}
-    products = market.get("products") or []
+        products = imported_products or []
+        source = "imported_competitor_report"
+        live_error = market["error"]
+    else:
+        products = market.get("products") or []
+        source = market.get("source", "amazon")
+        live_error = None
     if not products:
         return {"query": query, "items": [], "model_ok": False,
-                "data_source": "unavailable", "error": "真实竞品查询未返回商品，无法生成可信建议"}
+                "data_source": "unavailable",
+                "error": "实时 Amazon 查询被拦截，且该店铺尚未导入竞品 Excel，无法生成可信建议"}
     evidence = json.dumps(products, ensure_ascii=False, default=str)[:14000]
     prompt = (f"用户需求：{query}\n请基于以下真实 Amazon 查询结果给出 {top_n} 个机会商品。"
               "不得生成查询结果之外的市场数字；margin 无成本数据时写‘数据不足’。"
@@ -90,5 +96,5 @@ def suggest_opportunities(query: str, top_n: int = 4) -> Dict[str, Any]:
             "risk_level": risk.get("risk_level"),
         })
     return {"query": query, "items": items, "model_ok": bool(validated),
-            "data_source": market.get("source", "amazon"),
+            "data_source": source, "live_query_error": live_error,
             "evidence_count": len(products), "fetched_at": market.get("fetched_at")}

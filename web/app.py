@@ -36,8 +36,8 @@ from web import store  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
-from web.import_service import (ads_overview, list_imports, parse_upload,
-                                save_import, suggest_mapping)  # noqa: E402
+from web.import_service import (ads_overview, competitor_rows, list_imports,
+                                parse_upload, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
@@ -250,8 +250,11 @@ class OppSuggestIn(BaseModel):
 
 
 @app.post("/api/opportunities/suggest")
-def opportunities_suggest(body: OppSuggestIn) -> Dict[str, Any]:
-    return suggest_opportunities(body.query, body.top_n)
+def opportunities_suggest(body: OppSuggestIn,
+                          x_tradeflow_user: str = Header(default="default"),
+                          x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return suggest_opportunities(
+        body.query, body.top_n, competitor_rows(x_tradeflow_user, x_tradeflow_store))
 
 
 @app.post("/api/chat", response_model=ChatOut)
