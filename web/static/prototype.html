@@ -654,7 +654,7 @@ button.imgbox{font-family:inherit}
         if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
       }catch(fallbackError){
         console.warn('chat history fallback failed',fallbackError);
-        box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">历史加载失败</div>';
+        box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
       }
     }
   }

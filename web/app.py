@@ -352,11 +352,19 @@ def _short_title(text: str) -> str:
     return (title[:28] + "…") if len(title) > 28 else (title or "新对话")
 
 
-def _session_owned(db, session_id: str, user_id: str, store_id: str):
+def _session_owned(db, session_id: str, user_id: str, store_id: str | None = None):
+    if store_id:
+        row = db.execute(
+            "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
+            "WHERE id=? AND user_id=? AND store_id=?",
+            (session_id, user_id, store_id),
+        ).fetchone()
+        if row:
+            return row
     return db.execute(
         "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
-        "WHERE id=? AND user_id=? AND store_id=?",
-        (session_id, user_id, store_id),
+        "WHERE id=? AND user_id=?",
+        (session_id, user_id),
     ).fetchone()
 
 
@@ -369,6 +377,12 @@ def chat_sessions(x_tradeflow_user: str = Header(default="default"),
             "WHERE user_id=? AND store_id=? ORDER BY updated_at DESC LIMIT 30",
             (x_tradeflow_user, x_tradeflow_store),
         ).fetchall()
+        if not rows:
+            rows = db.execute(
+                "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
+                "WHERE user_id=? ORDER BY updated_at DESC LIMIT 30",
+                (x_tradeflow_user,),
+            ).fetchall()
     return {"items": [dict(r) for r in rows]}
 
 
@@ -380,9 +394,18 @@ def create_chat_session(body: ChatSessionIn,
     title = _short_title(body.title)
     with connect() as db:
         db.execute("INSERT OR IGNORE INTO users(id,name) VALUES(?,?)", (x_tradeflow_user, x_tradeflow_user))
+        store = db.execute(
+            "SELECT id FROM stores WHERE id=? AND user_id=?",
+            (x_tradeflow_store, x_tradeflow_user),
+        ).fetchone()
+        store_id = x_tradeflow_store if store else "default"
+        db.execute(
+            "INSERT OR IGNORE INTO stores(id,user_id,name,marketplace) VALUES('default',?,'默认店铺','US')",
+            (x_tradeflow_user,),
+        )
         db.execute(
             "INSERT INTO chat_sessions(id,user_id,store_id,title,agent) VALUES(?,?,?,?,?)",
-            (session_id, x_tradeflow_user, x_tradeflow_store, title, body.agent or "default"),
+            (session_id, x_tradeflow_user, store_id, title, body.agent or "default"),
         )
     return {"id": session_id, "title": title, "agent": body.agent or "default"}
 

@@ -96,6 +96,21 @@ class TestTenantPersistence(unittest.TestCase):
         self.assertEqual([m["role"] for m in loaded["messages"]], ["user", "assistant"])
         self.assertIn("高 ACOS", loaded["messages"][1]["content"])
 
+    def test_chat_sessions_tolerate_stale_store_header(self):
+        client = TestClient(app)
+        headers = {"X-TradeFlow-Store": "store_from_old_page"}
+        created = client.post("/api/chat/sessions", json={"title": "旧页面店铺"}, headers=headers)
+        self.assertEqual(created.status_code, 200)
+        session_id = created.json()["id"]
+
+        listed = client.get("/api/chat/sessions", headers=headers)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["items"][0]["id"], session_id)
+
+        saved = client.post(f"/api/chat/sessions/{session_id}/messages",
+                            json={"role": "user", "content": "刷新后还在吗"}, headers=headers)
+        self.assertEqual(saved.status_code, 200)
+
     def test_import_is_durable_and_drives_ads_overview(self):
         mapping = {"Campaign Name": "campaign", "Clicks": "clicks", "Impressions": "impressions",
                    "Spend": "spend", "Sales": "sales", "Orders": "orders",
