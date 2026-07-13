@@ -238,7 +238,7 @@ def _build_import_data_agent(user_id: str, store_id: str, observer=None):
         system_prompt=prompt,
         tools=build_import_tools(user_id, store_id),
         observer=observer,
-        max_iterations=8,
+        max_iterations=12,
     )
 
 

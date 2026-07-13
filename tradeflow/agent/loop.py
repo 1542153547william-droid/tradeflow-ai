@@ -62,6 +62,48 @@ class Agent:
         self.max_iterations = max_iterations
         self.observer = observer
 
+    def _finalize_after_max_iterations(
+        self,
+        messages: List[Message],
+        tool_specs: Optional[List[dict]],
+    ) -> str:
+        """Ask the model for a final answer when the tool loop hits its guard.
+
+        Some providers emit useful "I'll inspect..." text in tool-use turns. If
+        we return that after max_iterations, users see a half-answer. This extra
+        no-tools turn forces a concise synthesis from the observations already
+        collected.
+        """
+        prompt = (
+            "工具调用轮数已经达到上限。不要再调用工具，也不要说“让我继续检查”。"
+            "请只基于上面已经返回的工具结果，直接给用户一个完整、可执行的最终答复。"
+            "如果仍有数据缺口，请明确标注缺口；不要编造未提供的数据。"
+        )
+        final_messages = list(messages) + [Message(role=Role.USER, content=prompt)]
+        try:
+            response = self.provider.complete(
+                messages=final_messages,
+                tools=None,
+                system=self.system_prompt or None,
+            )
+        except Exception:  # noqa: BLE001 - preserve max-iteration fallback
+            response = None
+        if response and response.text.strip():
+            messages.append(Message(role=Role.ASSISTANT, content=response.text,
+                                    reasoning=response.reasoning))
+            return response.text
+        last_tool = next(
+            (r.content for m in reversed(messages) for r in m.tool_results
+             if r.content),
+            "",
+        )
+        if last_tool:
+            return (
+                "分析已达到工具调用上限，下面是目前已拿到的关键数据结果。"
+                "建议缩小问题范围后继续追问：\n\n" + last_tool[:4000]
+            )
+        return "分析已达到工具调用上限，但没有拿到足够的工具结果。请缩小问题范围后再试。"
+
     def run(self, user_input: str, history: Optional[List[Message]] = None) -> AgentResult:
         messages: List[Message] = list(history or [])
         messages.append(Message(role=Role.USER, content=user_input))
@@ -108,11 +150,7 @@ class Agent:
             messages.append(Message(role=Role.TOOL, tool_results=results))
 
         stopped_early = True
-        last_text = next(
-            (m.content for m in reversed(messages)
-             if m.role == Role.ASSISTANT and m.content),
-            "",
-        )
+        last_text = self._finalize_after_max_iterations(messages, tool_specs)
         return AgentResult(
             output=last_text,
             messages=messages,
@@ -175,8 +213,9 @@ class Agent:
                 results.append(self._execute(call.id, call.name, call.arguments))
             messages.append(Message(role=Role.TOOL, tool_results=results))
 
-        last_text = next((m.content for m in reversed(messages)
-                          if m.role == Role.ASSISTANT and m.content), "")
+        last_text = self._finalize_after_max_iterations(messages, tool_specs)
+        if last_text:
+            yield ("token", last_text)
         yield ("final", AgentResult(output=last_text, messages=messages,
                                     iterations=iteration, stopped_early=True))
 

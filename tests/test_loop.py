@@ -82,6 +82,23 @@ class TestAgentLoop(unittest.TestCase):
         self.assertTrue(result.stopped_early)
         self.assertEqual(result.iterations, 3)
 
+    def test_max_iterations_gets_final_synthesis(self):
+        loopy = LLMResponse(
+            text="Let me check one more thing.",
+            stop_reason=StopReason.TOOL_USE,
+            tool_calls=[ToolCall(id="c", name="calculator",
+                                 arguments={"expression": "1+1"})],
+        )
+        provider = MockProvider(script=[
+            loopy,
+            LLMResponse(text="Final answer from tool results.", stop_reason=StopReason.END),
+        ])
+        agent = Agent(provider=provider, tools=ToolRegistry([calculator]),
+                      max_iterations=1)
+        result = agent.run("loop once")
+        self.assertTrue(result.stopped_early)
+        self.assertEqual(result.output, "Final answer from tool results.")
+
     def test_heuristic_end_to_end(self):
         agent = Agent(provider=MockProvider(), tools=ToolRegistry([calculator]))
         result = agent.run("please compute 6*7")
