@@ -9,6 +9,7 @@ from openpyxl import Workbook
 
 from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
+from web.app import ChatTurn, _import_data_scope, _import_data_user_input
 from web import database, store
 from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
@@ -156,6 +157,25 @@ class TestPromptAndTools(unittest.TestCase):
         self.assertEqual(sample_props["filters"]["type"], "object")
         self.assertEqual(aggregate_props["filters"]["type"], "object")
         self.assertEqual(aggregate_props["metrics"]["type"], "object")
+
+    def test_import_agent_scopes_transaction_queries_to_orders(self):
+        history = [
+            ChatTurn(role="user", content="刚才分析广告报表，找高 ACOS 搜索词"),
+            ChatTurn(role="assistant", content="已基于广告搜索词报表分析。"),
+        ]
+        message = "分析我刚刚上传的商品交易数据，看下现在商品的问题在哪里，要怎么优化"
+        user_input = _import_data_user_input(message, history)
+        self.assertEqual(_import_data_scope(message, history), "orders")
+        self.assertIn("report_type='orders'", user_input)
+        self.assertIn("不要调用或分析 ads_search_terms", user_input)
+        self.assertIn("不要主动提 ACOS", user_input)
+
+    def test_import_agent_scopes_ads_queries_to_ads_report(self):
+        message = "分析刚导入的广告搜索词报表，找出高 ACOS 的词"
+        user_input = _import_data_user_input(message, [])
+        self.assertEqual(_import_data_scope(message, []), "ads_search_terms")
+        self.assertIn("report_type='ads_search_terms'", user_input)
+        self.assertIn("不要把订单交易文件混入结论", user_input)
 
 
 if __name__ == "__main__":

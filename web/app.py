@@ -219,16 +219,101 @@ def _is_import_data_query(message: str, history: List[ChatTurn] | None = None) -
     ))
 
 
+ADS_SCOPE_TERMS = (
+    "广告", "acos", "roas", "搜索词", "竞价", "否词", "否定", "投放", "campaign", "ppc",
+)
+ORDER_SCOPE_TERMS = (
+    "商品交易", "交易数据", "订单", "订单数据", "销售数据", "商品数据", "sku",
+    "销量", "销售额", "客单价", "商品表现",
+)
+INVENTORY_SCOPE_TERMS = ("库存", "补货", "缺货", "库龄", "available", "stock")
+COMPETITOR_SCOPE_TERMS = ("竞品", "竞争", "对手", "asin")
+COMBINE_SCOPE_TERMS = ("结合", "一起", "综合", "全链路", "同时", "对比", "全部数据", "所有数据")
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _scope_hits(text: str) -> int:
+    groups = (ADS_SCOPE_TERMS, ORDER_SCOPE_TERMS, INVENTORY_SCOPE_TERMS, COMPETITOR_SCOPE_TERMS)
+    return sum(1 for terms in groups if _contains_any(text, terms))
+
+
+def _import_data_scope(message: str, history: List[ChatTurn] | None = None) -> str:
+    current = message.lower()
+    if _contains_any(current, COMBINE_SCOPE_TERMS) and _scope_hits(current) > 1:
+        return "multi"
+    if "全部数据" in current or "所有数据" in current:
+        return "multi"
+    if _contains_any(current, ORDER_SCOPE_TERMS) and not _contains_any(current, ADS_SCOPE_TERMS):
+        return "orders"
+    if _contains_any(current, ADS_SCOPE_TERMS):
+        return "ads_search_terms"
+    if _contains_any(current, INVENTORY_SCOPE_TERMS):
+        return "inventory"
+    if _contains_any(current, COMPETITOR_SCOPE_TERMS):
+        return "competitors"
+
+    context = _history_text(history or []).lower()
+    if _contains_any(context, COMBINE_SCOPE_TERMS) and _scope_hits(context) > 1:
+        return "multi"
+    if _contains_any(context, ORDER_SCOPE_TERMS) and not _contains_any(context, ADS_SCOPE_TERMS):
+        return "orders"
+    if _contains_any(context, ADS_SCOPE_TERMS):
+        return "ads_search_terms"
+    if _contains_any(context, INVENTORY_SCOPE_TERMS):
+        return "inventory"
+    if _contains_any(context, COMPETITOR_SCOPE_TERMS):
+        return "competitors"
+    return "auto"
+
+
+def _import_data_scope_directive(message: str, history: List[ChatTurn]) -> str:
+    scope = _import_data_scope(message, history)
+    directives = {
+        "orders": (
+            "本次用户要求分析商品交易/订单/销售类数据。请优先且只使用 report_type='orders' "
+            "的导入文件；不要调用或分析 ads_search_terms，不要主动提 ACOS、ROAS、广告投放、"
+            "搜索词、竞价、否词，除非用户明确要求结合广告数据。优化建议只能基于订单/交易指标，"
+            "例如 SKU 销售额、订单数、销量、客单价、退款/调整、费用、总额、地区或履约等字段。"
+        ),
+        "ads_search_terms": (
+            "本次用户要求分析广告/搜索词/投放类数据。请优先使用 report_type='ads_search_terms' "
+            "的导入文件；不要把订单交易文件混入结论，除非用户明确要求结合订单或商品交易数据。"
+        ),
+        "inventory": (
+            "本次用户要求分析库存类数据。请优先使用 report_type='inventory' 的导入文件；"
+            "不要把广告或订单文件混入结论，除非用户明确要求跨报表综合分析。"
+        ),
+        "competitors": (
+            "本次用户要求分析竞品/ASIN 类数据。请优先使用 report_type='competitors' 的导入文件；"
+            "不要把广告或订单文件混入结论，除非用户明确要求跨报表综合分析。"
+        ),
+        "multi": (
+            "本次用户明确要求跨报表或综合分析。可以先 list_imported_files，再按问题选择多个 "
+            "report_type；结论必须说明每个判断分别来自哪些导入文件。"
+        ),
+        "auto": (
+            "本次用户没有明确限定报表类型。请先 list_imported_files 判断可用文件，再根据用户问题选择"
+            "最相关的 report_type；不要因为系统中存在其他文件就自动混用。"
+        ),
+    }
+    return directives[scope]
+
+
 def _build_import_data_agent(user_id: str, store_id: str, observer=None):
     prompt = (
         "你是 TradeFlow-AI 的通用导入数据分析智能体。用户上传的 Excel/CSV 已经入库，"
         "你不能假设只分析某一种文件，也不能声称没有收到文件，除非工具返回确实没有数据。\n\n"
         "工作方式：\n"
-        "1. 根据用户问题和最近对话，自己决定调用哪些工具。\n"
+        "1. 先判断用户当前问题限定的数据范围，再决定调用哪些工具。不要因为系统中存在其他导入文件就混用。\n"
         "2. 不知道有哪些文件时，先调用 list_imported_files。\n"
-        "3. 不知道字段含义时，调用 inspect_imported_file 看字段、样例和数字列概览。\n"
-        "4. 需要汇总排行、分组对比、筛选明细时，调用 aggregate_imported_file 或 sample_imported_rows。\n"
-        "5. 工具结果不足以回答时，可以继续调用工具；足够时再结束。\n\n"
+        "3. 用户明确限定订单、广告、库存、竞品等范围时，工具调用必须传对应 report_type；只有用户明确要求"
+        "跨报表/综合分析时才跨 report_type。\n"
+        "4. 不知道字段含义时，调用 inspect_imported_file 看字段、样例和数字列概览。\n"
+        "5. 需要汇总排行、分组对比、筛选明细时，调用 aggregate_imported_file 或 sample_imported_rows。\n"
+        "6. 工具结果不足以回答时，可以继续调用工具；足够时再结束。\n\n"
         "边界：只基于工具返回的真实导入数据。金额没有币种时不要加币种。"
         "销售额不是利润；没有成本、毛利、回款率时不要计算利润/亏损金额。"
         "可以说 ACOS 高、广告效率风险高、花费高于广告归因销售额，但不要说明确亏损。"
@@ -245,6 +330,7 @@ def _build_import_data_agent(user_id: str, store_id: str, observer=None):
 def _import_data_user_input(message: str, history: List[ChatTurn]) -> str:
     return (
         f"最近对话上下文：\n{_history_text(history) or '（无）'}\n\n"
+        f"数据范围约束：\n{_import_data_scope_directive(message, history)}\n\n"
         f"用户当前问题：{message}\n\n"
         "请按需调用导入数据工具进行实时分析。"
     )
