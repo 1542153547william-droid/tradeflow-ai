@@ -564,7 +564,7 @@ button.imgbox{font-family:inherit}
     const m=$('#storeMenu');m.innerHTML='';
     stores.forEach(s=>{const el=document.createElement('div');el.className='store-item';
       el.innerHTML=`<span class="dot" style="background:${sColor[s.status]}"></span><span class="meta"><b>${s.name}</b><span>${MK[s.mk]} · ${sText[s.status]} · 同步 ${s.sync}</span></span>${s.id===curStore?'<svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>':''}`;
-      el.onclick=()=>{curStore=s.id;syncStore();m.classList.remove('open');};m.appendChild(el);});
+      el.onclick=()=>{if(curStore!==s.id){curStore=s.id;resetChatCanvas(false);}syncStore();loadChatSessions(true);m.classList.remove('open');};m.appendChild(el);});
     const sep=document.createElement('div');sep.className='sep';m.appendChild(sep);
     const add=document.createElement('div');add.className='store-item';add.style.color='var(--accent-strong)';
     add.innerHTML='<span style="width:7px"></span><span class="meta"><b>＋ 新建店铺空间</b></span>';add.onclick=()=>{m.classList.remove('open');openAuth();};m.appendChild(add);
@@ -633,13 +633,14 @@ button.imgbox{font-family:inherit}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
   function scrollDown(){requestAnimationFrame(()=>scroll.scrollTop=scroll.scrollHeight);}
-  async function loadChatSessions(){
+  async function loadChatSessions(autoOpenLatest=false){
     const box=$('#chatHistoryList');if(!box)return;
     try{
       const d=await (await fetch('/api/chat/sessions')).json();
       const items=d.items||[];
       box.innerHTML=items.length?items.map(s=>`<button class="hist-item${s.id===currentChatId?' active':''}" data-chat-id="${esc(s.id)}">${esc(s.title||'新对话')}</button>`).join('')
         :'<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+      if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
     }catch(e){box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">历史加载失败</div>';}
   }
   async function ensureChatSession(firstText,agent){
@@ -654,8 +655,9 @@ button.imgbox{font-family:inherit}
     try{await fetch('/api/chat/sessions/'+encodeURIComponent(currentChatId)+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({role,content})});loadChatSessions();}catch(e){}
   }
-  function resetChatCanvas(){
-    inner.innerHTML=HELLO_HTML;started=false;selected=null;chatHistory=[];currentChatId=null;scrollDown();loadChatSessions();
+  function resetChatCanvas(refreshList=true){
+    inner.innerHTML=HELLO_HTML;started=false;selected=null;chatHistory=[];currentChatId=null;scrollDown();
+    if(refreshList)loadChatSessions();
   }
   async function loadChatSession(id){
     try{
@@ -674,10 +676,10 @@ button.imgbox{font-family:inherit}
   }
   function remember(role,content,persist=true){
     const text=String(content||'').replace(/\s+/g,' ').trim();
-    if(!text)return;
+    if(!text)return Promise.resolve();
     chatHistory.push({role,content:text.slice(0,4000)});
     if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
-    if(persist)saveChatMessage(role,text.slice(0,4000));
+    return persist?saveChatMessage(role,text.slice(0,4000)):Promise.resolve();
   }
 
   function thinking(label,then){
@@ -820,9 +822,9 @@ button.imgbox{font-family:inherit}
     flushAll();
     return '<div class="md">'+out.join('')+'</div>';
   }
-  async function respondReal(text){
+  async function respondReal(text, historyOverride=null){
     const agent=chosenAgent(text);
-    const history=chatHistory.slice(-8);
+    const history=historyOverride||chatHistory.slice(-8);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
@@ -920,10 +922,11 @@ button.imgbox{font-family:inherit}
   /* input handling */
   async function submitInput(text){const clean=text.trim();if(!clean)return;
     const agent=chosenAgent(clean);
+    const historyBefore=chatHistory.slice(-8);
     try{await ensureChatSession(clean,agent);}catch(e){toast('对话保存初始化失败');}
-    addUser(clean);$('#chatInp').value='';autosize();remember('user',clean);
+    addUser(clean);$('#chatInp').value='';autosize();await remember('user',clean);
     if(agent==='selection'){respondSelection(clean);}
-    else{respondReal(clean);}}
+    else{respondReal(clean,historyBefore);}}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
@@ -1191,7 +1194,7 @@ button.imgbox{font-family:inherit}
 
   /* ---------- init ---------- */
   renderStores();loadChatSessions();loadOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
-  fetch('/api/stores').then(r=>r.json()).then(d=>{if(d.items&&d.items.length){stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));curStore=stores[0].id;syncStore();}}).catch(()=>{});
+  fetch('/api/stores').then(r=>r.json()).then(d=>{if(d.items&&d.items.length){stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));curStore=stores[0].id;syncStore();loadChatSessions(true);}}).catch(()=>{});
 
   /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
   (function initBackend(){
