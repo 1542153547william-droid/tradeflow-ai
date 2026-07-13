@@ -427,13 +427,19 @@ def add_chat_message(session_id: str, body: ChatMessageIn,
 @app.get("/")
 def index() -> FileResponse:
     # 新的完整产品原型页（对话已接后端；机会上新等模块仍在接入中）。
-    return FileResponse(STATIC / "prototype.html")
+    return FileResponse(
+        STATIC / "prototype.html",
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
+    )
 
 
 @app.get("/classic")
 def classic() -> FileResponse:
     # 旧的极简聊天页，保留作为纯净的智能体联调入口。
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
+    )
 
 
 @app.get("/healthz")

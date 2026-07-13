@@ -636,12 +636,27 @@ button.imgbox{font-family:inherit}
   async function loadChatSessions(autoOpenLatest=false){
     const box=$('#chatHistoryList');if(!box)return;
     try{
-      const d=await (await fetch('/api/chat/sessions')).json();
+      let r=await fetch('/api/chat/sessions');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      let d=await r.json();
       const items=d.items||[];
       box.innerHTML=items.length?items.map(s=>`<button class="hist-item${s.id===currentChatId?' active':''}" data-chat-id="${esc(s.id)}">${esc(s.title||'新对话')}</button>`).join('')
         :'<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
       if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
-    }catch(e){box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">历史加载失败</div>';}
+    }catch(e){
+      console.warn('chat history load failed',e);
+      try{
+        const r=await nativeFetch('/api/chat/sessions',{headers:{'X-TradeFlow-Store':'default'}});
+        if(!r.ok)throw new Error('fallback HTTP '+r.status);
+        const d=await r.json(),items=d.items||[];
+        box.innerHTML=items.length?items.map(s=>`<button class="hist-item${s.id===currentChatId?' active':''}" data-chat-id="${esc(s.id)}">${esc(s.title||'新对话')}</button>`).join('')
+          :'<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+        if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
+      }catch(fallbackError){
+        console.warn('chat history fallback failed',fallbackError);
+        box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">历史加载失败</div>';
+      }
+    }
   }
   async function ensureChatSession(firstText,agent){
     if(currentChatId)return currentChatId;
