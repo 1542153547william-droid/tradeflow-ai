@@ -1086,11 +1086,11 @@ button.imgbox{font-family:inherit}
   let importPreview=null;
   const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['title','商品标题'],['brand','品牌'],['price','价格'],['rating','评分'],['review_count','评论数'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['stock','库存'],['order_id','订单号']];
   $('#fileInp').onchange=async e=>{const file=e.target.files[0];if(!file)return;
-    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';status.textContent=`正在上传并解析 ${file.name}…`;
+    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';status.textContent=`正在上传并快速预览 ${file.name}… 大文件会先读取表头和样例。`;
     const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent='';
     try{const r=await fetch('/api/imports/preview',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
       importPreview=await r.json();$('#fileMeta').textContent=` · ${importPreview.row_count} 行 · ${importPreview.columns.length} 列`;
-      status.style.color='var(--good)';status.textContent=`解析完成：${importPreview.row_count} 行、${importPreview.columns.length} 列，请确认字段映射。`;
+      status.style.color='var(--good)';status.textContent=`预览完成：${importPreview.row_count} 行、${importPreview.columns.length} 列，请确认字段映射。确认后再完整入库。`;
       $('#mapping').style.display='block';
       const tbl=$('#mappingTbl');tbl.innerHTML='<tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>';
       importPreview.columns.forEach(c=>{const tr=tbl.insertRow(-1),example=(importPreview.preview[0]||{})[c]??'';
@@ -1101,9 +1101,12 @@ button.imgbox{font-family:inherit}
     const mapping={};$$('#mappingTbl select').forEach(s=>{if(s.value)mapping[s.dataset.col]=s.value;});
     const fd=new FormData();fd.append('file',file);fd.append('mapping',JSON.stringify(mapping));
     $('#confirmMap').disabled=true;
+    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';
+    status.textContent=`正在完整导入 ${importPreview.row_count} 行数据… 大文件可能需要几十秒，请不要关闭页面。`;
     try{const r=await fetch('/api/imports',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));const d=await r.json();
-      $('#mapping').style.display='none';const row=$('#histTbl').insertRow(1);row.innerHTML=`<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>${esc(d.report_type)}</td><td class="mono">${d.row_count}</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>`;toast(`Excel 导入完成 · ${d.row_count} 行`);
-    }catch(err){toast('导入失败：'+String(err.message||err));}finally{$('#confirmMap').disabled=false;}};
+      $('#mapping').style.display='none';status.style.color='var(--good)';status.textContent=`导入完成：${d.row_count} 行已入库。`;
+      const row=$('#histTbl').insertRow(1);row.innerHTML=`<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>${esc(d.report_type)}</td><td class="mono">${d.row_count}</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>`;toast(`Excel 导入完成 · ${d.row_count} 行`);
+    }catch(err){status.style.color='var(--crit)';status.textContent='导入失败：'+String(err.message||err);toast('导入失败：'+String(err.message||err));}finally{$('#confirmMap').disabled=false;}};
 
   /* ---------- module: optimize ---------- */
   const products=[

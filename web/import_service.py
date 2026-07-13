@@ -7,9 +7,14 @@ import io
 import json
 import re
 import uuid
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from web.database import audit, connect
+
+HEADER_SCAN_ROWS = 30
+PREVIEW_ROWS = 8
+INSERT_CHUNK_SIZE = 1000
 
 ALIASES = {
     "sku": {"sku", "seller sku", "商家sku", "卖家sku"},
@@ -59,64 +64,131 @@ def detect_report_type(mapping: dict[str, str]) -> str:
     return "unknown"
 
 
-def parse_upload(filename: str, content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
+def _is_nonempty(row: list[Any]) -> bool:
+    return any(v not in (None, "") for v in row)
+
+
+def _header_score(row: list[Any], known: set[str]) -> int:
+    normalized = [_norm(c) for c in row if _norm(c)]
+    recognized = sum(c in known for c in normalized)
+    # Business-field matches dominate; fuller rows win exact ties.
+    return recognized * 100 + len(normalized)
+
+
+def _iter_csv_rows(content: bytes) -> Iterator[list[Any]]:
+    text = content.decode("utf-8-sig", errors="replace")
+    yield from csv.reader(io.StringIO(text))
+
+
+def _iter_xlsx_rows(content: bytes, *, read_only: bool) -> Iterator[list[Any]]:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(content), data_only=True, read_only=read_only)
+    try:
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                yield list(row)
+    finally:
+        wb.close()
+
+
+def _iter_upload_rows(filename: str, content: bytes, *, read_only: bool = True) -> Iterator[list[Any]]:
     lower = filename.lower()
     if lower.endswith(".csv"):
-        text = content.decode("utf-8-sig", errors="replace")
-        rows = list(csv.reader(io.StringIO(text)))
+        yield from _iter_csv_rows(content)
     elif lower.endswith((".xlsx", ".xlsm")):
-        from openpyxl import load_workbook
-        # Amazon exports occasionally declare a broken worksheet dimension
-        # (for example A1:A1 although thousands of cells exist). read_only mode
-        # trusts that declaration and silently returns one cell, so use full
-        # mode here to discover the actual populated range.
-        wb = load_workbook(io.BytesIO(content), data_only=True, read_only=False)
-        rows = []
-        for ws in wb.worksheets:
-            sheet_rows = [list(r) for r in ws.iter_rows(values_only=True)]
-            if sheet_rows:
-                rows.extend(sheet_rows)
-        wb.close()
+        yield from _iter_xlsx_rows(content, read_only=read_only)
     else:
         raise ValueError("仅支持 .xlsx、.xlsm 和 .csv")
-    rows = [r for r in rows if any(v not in (None, "") for v in r)]
-    if not rows:
-        raise ValueError("文件中没有可读取的数据")
+
+
+def _parse_rows(rows_iter: Iterable[list[Any]], *, data_limit: int | None = None) -> tuple[list[str], list[dict[str, Any]], int]:
     known = {_norm(a) for aliases in ALIASES.values() for a in aliases}
-    scored = []
-    for i, row in enumerate(rows[:30]):
-        normalized = [_norm(c) for c in row if _norm(c)]
-        recognized = sum(c in known for c in normalized)
-        # Business-field matches dominate; earlier rows win exact ties.
-        scored.append((recognized * 100 + len(normalized), -i, i))
+    scan: list[list[Any]] = []
+    iterator = iter(rows_iter)
+    for row in iterator:
+        if not _is_nonempty(row):
+            continue
+        scan.append(row)
+        if len(scan) >= HEADER_SCAN_ROWS:
+            break
+    if not scan:
+        raise ValueError("文件中没有可读取的数据")
+
+    scored = [(_header_score(row, known), -i, i) for i, row in enumerate(scan)]
     _, _, header_idx = max(scored)
-    columns = [str(v or f"column_{i+1}").strip() for i, v in enumerate(rows[header_idx])]
+    columns = [str(v or f"column_{i+1}").strip() for i, v in enumerate(scan[header_idx])]
     data = []
-    for row in rows[header_idx + 1:]:
+    row_count = 0
+
+    def consume(row: list[Any]) -> None:
+        nonlocal row_count
         item = {columns[i]: row[i] for i in range(min(len(columns), len(row))) if row[i] not in (None, "")}
         if item:
-            data.append(item)
-    return columns, data
+            row_count += 1
+            if data_limit is None or len(data) < data_limit:
+                data.append(item)
+
+    for row in scan[header_idx + 1:]:
+        consume(row)
+    for row in iterator:
+        if _is_nonempty(row):
+            consume(row)
+    return columns, data, row_count
+
+
+def _parse_upload(filename: str, content: bytes, *, data_limit: int | None = None) -> tuple[list[str], list[dict[str, Any]], int]:
+    lower = filename.lower()
+    columns, rows, row_count = _parse_rows(_iter_upload_rows(filename, content, read_only=True), data_limit=data_limit)
+    # Amazon exports occasionally declare a broken worksheet dimension
+    # (for example A1:A1 although thousands of cells exist). read_only mode
+    # trusts that declaration. Fast-path normal files, and fall back only when
+    # the parsed shape looks suspicious.
+    if lower.endswith((".xlsx", ".xlsm")) and (len(columns) <= 1 or row_count == 0):
+        columns, rows, row_count = _parse_rows(_iter_upload_rows(filename, content, read_only=False), data_limit=data_limit)
+    return columns, rows, row_count
+
+
+def parse_upload(filename: str, content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
+    columns, rows, _ = _parse_upload(filename, content)
+    return columns, rows
+
+
+def parse_upload_preview(filename: str, content: bytes) -> dict[str, Any]:
+    columns, preview, row_count = _parse_upload(filename, content, data_limit=PREVIEW_ROWS)
+    mapping = suggest_mapping(columns)
+    return {"columns": columns, "mapping": mapping, "preview": preview, "row_count": row_count}
 
 
 def save_import(user_id: str, store_id: str, filename: str, columns: list[str],
                 rows: list[dict[str, Any]], mapping: dict[str, str]) -> dict[str, Any]:
     batch_id = f"imp_{uuid.uuid4().hex[:12]}"
     report_type = detect_report_type(mapping)
-    normalized = [{mapping.get(k, k): v for k, v in row.items()} for row in rows]
+    row_count = len(rows)
     with connect() as db:
         db.execute(
             "INSERT INTO import_batches(id,user_id,store_id,filename,report_type,status,row_count,columns_json,mapping_json) VALUES(?,?,?,?,?,'completed',?,?,?)",
-            (batch_id, user_id, store_id, filename, report_type, len(normalized),
+            (batch_id, user_id, store_id, filename, report_type, row_count,
              json.dumps(columns, ensure_ascii=False), json.dumps(mapping, ensure_ascii=False)),
         )
-        db.executemany(
-            "INSERT INTO imported_rows(batch_id,user_id,store_id,row_json) VALUES(?,?,?,?)",
-            [(batch_id, user_id, store_id, json.dumps(r, ensure_ascii=False, default=str)) for r in normalized],
-        )
-    audit(user_id, store_id, "import.completed", {"batch_id": batch_id, "rows": len(normalized)})
+        chunk = []
+        for row in rows:
+            normalized = {mapping.get(k, k): v for k, v in row.items()}
+            chunk.append((batch_id, user_id, store_id, json.dumps(normalized, ensure_ascii=False, default=str)))
+            if len(chunk) >= INSERT_CHUNK_SIZE:
+                db.executemany(
+                    "INSERT INTO imported_rows(batch_id,user_id,store_id,row_json) VALUES(?,?,?,?)",
+                    chunk,
+                )
+                chunk.clear()
+        if chunk:
+            db.executemany(
+                "INSERT INTO imported_rows(batch_id,user_id,store_id,row_json) VALUES(?,?,?,?)",
+                chunk,
+            )
+    audit(user_id, store_id, "import.completed", {"batch_id": batch_id, "rows": row_count})
     return {"id": batch_id, "filename": filename, "report_type": report_type,
-            "row_count": len(normalized), "status": "completed"}
+            "row_count": row_count, "status": "completed"}
 
 
 def list_imports(user_id: str, store_id: str) -> list[dict[str, Any]]:

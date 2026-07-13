@@ -41,7 +41,7 @@ from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
 from web.import_service import (ads_chat_context, ads_overview, competitor_rows, list_imports,
-                                parse_upload, save_import, suggest_mapping)  # noqa: E402
+                                parse_upload, parse_upload_preview, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
 STATIC = Path(__file__).parent / "static"
@@ -475,15 +475,13 @@ def remove_opportunity(opp_id: str, x_tradeflow_user: str = Header(default="defa
 @app.post("/api/imports/preview")
 async def import_preview(file: UploadFile = File(...)) -> Dict[str, Any]:
     content = await file.read()
-    if len(content) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="文件不能超过 20MB")
+    if len(content) > 80 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件不能超过 80MB")
     try:
-        columns, rows = parse_upload(file.filename or "upload.xlsx", content)
+        preview = parse_upload_preview(file.filename or "upload.xlsx", content)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    mapping = suggest_mapping(columns)
-    return {"filename": file.filename, "columns": columns, "mapping": mapping,
-            "preview": rows[:10], "row_count": len(rows)}
+    return {"filename": file.filename, **preview}
 
 
 @app.post("/api/imports")
@@ -491,6 +489,8 @@ async def import_commit(file: UploadFile = File(...), mapping: str = Form(defaul
                         x_tradeflow_user: str = Header(default="default"),
                         x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
     content = await file.read()
+    if len(content) > 80 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件不能超过 80MB")
     try:
         columns, rows = parse_upload(file.filename or "upload.xlsx", content)
         selected = json.loads(mapping) if mapping and mapping != "{}" else suggest_mapping(columns)
