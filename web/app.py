@@ -21,6 +21,7 @@ import base64  # noqa: E402
 import hmac  # noqa: E402
 import json  # noqa: E402
 import threading  # noqa: E402
+import uuid  # noqa: E402
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
@@ -138,6 +139,16 @@ class ChatOut(BaseModel):
     iterations: int
     stopped_early: bool
     steps: List[Dict[str, Any]]
+
+
+class ChatSessionIn(BaseModel):
+    title: str = "新对话"
+    agent: str = "default"
+
+
+class ChatMessageIn(BaseModel):
+    role: str
+    content: str
 
 
 def _history_text(history: List[ChatTurn]) -> str:
@@ -334,6 +345,83 @@ def _import_data_user_input(message: str, history: List[ChatTurn]) -> str:
         f"用户当前问题：{message}\n\n"
         "请按需调用导入数据工具进行实时分析。"
     )
+
+
+def _short_title(text: str) -> str:
+    title = " ".join((text or "").strip().split())
+    return (title[:28] + "…") if len(title) > 28 else (title or "新对话")
+
+
+def _session_owned(db, session_id: str, user_id: str, store_id: str):
+    return db.execute(
+        "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
+        "WHERE id=? AND user_id=? AND store_id=?",
+        (session_id, user_id, store_id),
+    ).fetchone()
+
+
+@app.get("/api/chat/sessions")
+def chat_sessions(x_tradeflow_user: str = Header(default="default"),
+                  x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    with connect() as db:
+        rows = db.execute(
+            "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
+            "WHERE user_id=? AND store_id=? ORDER BY updated_at DESC LIMIT 30",
+            (x_tradeflow_user, x_tradeflow_store),
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.post("/api/chat/sessions")
+def create_chat_session(body: ChatSessionIn,
+                        x_tradeflow_user: str = Header(default="default"),
+                        x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    session_id = f"chat_{uuid.uuid4().hex[:12]}"
+    title = _short_title(body.title)
+    with connect() as db:
+        db.execute("INSERT OR IGNORE INTO users(id,name) VALUES(?,?)", (x_tradeflow_user, x_tradeflow_user))
+        db.execute(
+            "INSERT INTO chat_sessions(id,user_id,store_id,title,agent) VALUES(?,?,?,?,?)",
+            (session_id, x_tradeflow_user, x_tradeflow_store, title, body.agent or "default"),
+        )
+    return {"id": session_id, "title": title, "agent": body.agent or "default"}
+
+
+@app.get("/api/chat/sessions/{session_id}")
+def get_chat_session(session_id: str,
+                     x_tradeflow_user: str = Header(default="default"),
+                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    with connect() as db:
+        row = _session_owned(db, session_id, x_tradeflow_user, x_tradeflow_store)
+        if not row:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        messages = db.execute(
+            "SELECT role,content,created_at FROM chat_messages WHERE session_id=? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+    return {**dict(row), "messages": [dict(m) for m in messages]}
+
+
+@app.post("/api/chat/sessions/{session_id}/messages")
+def add_chat_message(session_id: str, body: ChatMessageIn,
+                     x_tradeflow_user: str = Header(default="default"),
+                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    role = body.role if body.role in {"user", "assistant"} else ""
+    content = (body.content or "").strip()
+    if not role or not content:
+        raise HTTPException(status_code=400, detail="消息无效")
+    with connect() as db:
+        row = _session_owned(db, session_id, x_tradeflow_user, x_tradeflow_store)
+        if not row:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        cur = db.execute(
+            "INSERT INTO chat_messages(session_id,role,content) VALUES(?,?,?)",
+            (session_id, role, content[:12000]),
+        )
+        if role == "user" and row["title"] == "新对话":
+            db.execute("UPDATE chat_sessions SET title=? WHERE id=?", (_short_title(content), session_id))
+        db.execute("UPDATE chat_sessions SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (session_id,))
+    return {"ok": True, "id": cur.lastrowid}
 
 
 @app.get("/")

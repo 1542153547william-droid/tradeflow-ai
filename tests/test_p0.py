@@ -5,11 +5,12 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
 from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
-from web.app import ChatTurn, _import_data_scope, _import_data_user_input
+from web.app import ChatTurn, app, _import_data_scope, _import_data_user_input
 from web import database, store
 from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
@@ -76,6 +77,24 @@ class TestTenantPersistence(unittest.TestCase):
         store.add_opp({"key": "x", "name": "One"}, "default", "default")
         self.assertEqual(len(store.list_opps("default", "default")), 1)
         self.assertEqual(store.list_opps("default", "second"), [])
+
+    def test_chat_sessions_persist_messages(self):
+        client = TestClient(app)
+        created = client.post("/api/chat/sessions", json={"title": "分析广告报表", "agent": "ads"}).json()
+        session_id = created["id"]
+        self.assertTrue(session_id.startswith("chat_"))
+        self.assertEqual(created["title"], "分析广告报表")
+
+        r = client.post(f"/api/chat/sessions/{session_id}/messages",
+                        json={"role": "user", "content": "刚才的广告报表怎么看？"})
+        self.assertEqual(r.status_code, 200)
+        r = client.post(f"/api/chat/sessions/{session_id}/messages",
+                        json={"role": "assistant", "content": "先看高 ACOS 搜索词。"})
+        self.assertEqual(r.status_code, 200)
+
+        loaded = client.get(f"/api/chat/sessions/{session_id}").json()
+        self.assertEqual([m["role"] for m in loaded["messages"]], ["user", "assistant"])
+        self.assertIn("高 ACOS", loaded["messages"][1]["content"])
 
     def test_import_is_durable_and_drives_ads_overview(self):
         mapping = {"Campaign Name": "campaign", "Clicks": "clicks", "Impressions": "impressions",
