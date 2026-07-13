@@ -66,7 +66,11 @@ def parse_upload(filename: str, content: bytes) -> tuple[list[str], list[dict[st
         rows = list(csv.reader(io.StringIO(text)))
     elif lower.endswith((".xlsx", ".xlsm")):
         from openpyxl import load_workbook
-        wb = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+        # Amazon exports occasionally declare a broken worksheet dimension
+        # (for example A1:A1 although thousands of cells exist). read_only mode
+        # trusts that declaration and silently returns one cell, so use full
+        # mode here to discover the actual populated range.
+        wb = load_workbook(io.BytesIO(content), data_only=True, read_only=False)
         rows = []
         for ws in wb.worksheets:
             sheet_rows = [list(r) for r in ws.iter_rows(values_only=True)]
@@ -124,13 +128,24 @@ def list_imports(user_id: str, store_id: str) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
+def _latest_imported_rows(user_id: str, store_id: str, report_type: str) -> list[dict[str, Any]]:
     with connect() as db:
+        batch = db.execute(
+            "SELECT id FROM import_batches WHERE user_id=? AND store_id=? AND report_type=? "
+            "AND status='completed' AND row_count>0 ORDER BY created_at DESC, id DESC LIMIT 1",
+            (user_id, store_id, report_type),
+        ).fetchone()
+        if not batch:
+            return []
         rows = db.execute(
-            "SELECT r.row_json FROM imported_rows r JOIN import_batches b ON b.id=r.batch_id WHERE r.user_id=? AND r.store_id=? AND b.report_type='ads_search_terms'",
-            (user_id, store_id),
+            "SELECT row_json FROM imported_rows WHERE user_id=? AND store_id=? AND batch_id=?",
+            (user_id, store_id, batch["id"]),
         ).fetchall()
-    data = [json.loads(r[0]) for r in rows]
+    return [json.loads(r[0]) for r in rows]
+
+
+def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
+    data = _latest_imported_rows(user_id, store_id, "ads_search_terms")
     if not data:
         return {"items": [], "error": "请先导入真实广告搜索词报表"}
     campaigns: dict[str, dict[str, Any]] = {}
@@ -151,6 +166,145 @@ def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
         items.append(c)
     return {"items": sorted(items, key=lambda x: -x["spend"]), "source": "imported_report",
             "row_count": len(data)}
+
+
+def ads_chat_analysis(user_id: str, store_id: str) -> str | None:
+    """Return a concise, actionable ad report analysis for chat.
+
+    The regular agent tools read files from data/ads. Imported user reports live
+    in SQLite, so chat needs this bridge to avoid claiming that no report exists.
+    """
+    data = _latest_imported_rows(user_id, store_id, "ads_search_terms")
+    if not data:
+        return None
+
+    def num(value: Any) -> float:
+        try:
+            return float(str(value or 0).replace(",", "").replace("$", "") or 0)
+        except ValueError:
+            return 0.0
+
+    campaigns: dict[str, dict[str, Any]] = {}
+    terms: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in data:
+        campaign = str(row.get("campaign") or "未命名广告活动")
+        term = str(row.get("search_term") or "(空搜索词)").strip() or "(空搜索词)"
+        c = campaigns.setdefault(campaign, {"campaign": campaign, "impressions": 0.0, "clicks": 0.0,
+                                            "spend": 0.0, "sales": 0.0, "orders": 0.0})
+        t = terms.setdefault((campaign, term), {"campaign": campaign, "term": term, "impressions": 0.0,
+                                                "clicks": 0.0, "spend": 0.0, "sales": 0.0, "orders": 0.0})
+        for key in ("impressions", "clicks", "spend", "sales", "orders"):
+            value = num(row.get(key))
+            c[key] += value
+            t[key] += value
+
+    def enrich(item: dict[str, Any]) -> dict[str, Any]:
+        spend, sales, clicks, impressions, orders = (
+            item["spend"], item["sales"], item["clicks"], item["impressions"], item["orders"])
+        item["acos"] = spend / sales if sales else None
+        item["ctr"] = clicks / impressions if impressions else 0.0
+        item["cvr"] = orders / clicks if clicks else 0.0
+        item["cpc"] = spend / clicks if clicks else 0.0
+        return item
+
+    campaign_items = [enrich(dict(v)) for v in campaigns.values()]
+    term_items = [enrich(dict(v)) for v in terms.values()]
+    high_acos_campaigns = sorted(
+        [x for x in campaign_items if x["spend"] >= 10 and (x["acos"] is None or x["acos"] >= 0.4)],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:5]
+    negatives = sorted(
+        [x for x in term_items if x["spend"] >= 5 and x["orders"] == 0],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:8]
+    reduce_bids = sorted(
+        [x for x in term_items if x["spend"] >= 5 and x["sales"] > 0 and x["acos"] and x["acos"] >= 0.4],
+        key=lambda x: x["spend"],
+        reverse=True,
+    )[:6]
+    scale_terms = sorted(
+        [x for x in term_items if x["orders"] >= 2 and x["acos"] is not None and 0 < x["spend"]
+         and x["acos"] <= 0.2],
+        key=lambda x: (x["acos"], -x["orders"]),
+    )[:8]
+
+    total = enrich({
+        "impressions": sum(x["impressions"] for x in campaign_items),
+        "clicks": sum(x["clicks"] for x in campaign_items),
+        "spend": sum(x["spend"] for x in campaign_items),
+        "sales": sum(x["sales"] for x in campaign_items),
+        "orders": sum(x["orders"] for x in campaign_items),
+    })
+
+    def money(value: float) -> str:
+        return f"{value:.2f}"
+
+    def pct(value: float | None) -> str:
+        return "无销售" if value is None else f"{value * 100:.1f}%"
+
+    lines = [
+        f"已读取你导入的广告搜索词报表，共 {len(data)} 行。按真实入库数据计算：",
+        "",
+        "整体盘面：",
+        f"- 花费 {money(total['spend'])}，销售额 {money(total['sales'])}，订单 {int(total['orders'])}，ACOS {pct(total['acos'])}，转化率 {pct(total['cvr'])}。",
+        "",
+        "建议否定或重点排查的搜索词：",
+    ]
+    if negatives:
+        for x in negatives:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，花费 {money(x['spend'])}，点击 {int(x['clicks'])}，0 单。")
+    else:
+        lines.append("- 暂无达到阈值的零转化高花费词。")
+
+    lines.extend(["", "建议降价/降预算的广告活动："])
+    if high_acos_campaigns:
+        for x in high_acos_campaigns:
+            lines.append(
+                f"- {x['campaign']}：花费 {money(x['spend'])}，销售额 {money(x['sales'])}，订单 {int(x['orders'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 暂无明显高 ACOS 活动。")
+
+    lines.extend(["", "建议降低竞价的搜索词："])
+    if reduce_bids:
+        for x in reduce_bids:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，花费 {money(x['spend'])}，销售额 {money(x['sales'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 暂无明显高 ACOS 搜索词。")
+
+    lines.extend(["", "建议加预算/转精准的词："])
+    if scale_terms:
+        for x in scale_terms:
+            lines.append(
+                f"- {x['term']}：{x['campaign']}，订单 {int(x['orders'])}，花费 {money(x['spend'])}，销售额 {money(x['sales'])}，ACOS {pct(x['acos'])}。")
+    else:
+        lines.append("- 目前没有同时满足 2 单以上且 ACOS <= 20% 的放量词。")
+
+    lines.extend([
+        "",
+        "执行顺序建议：先否定零转化高花费词，再处理高 ACOS 活动，最后把低 ACOS 出单词单独拉到精准广告里放量。",
+    ])
+    return "\n".join(lines)
+
+
+def ads_chat_context(user_id: str, store_id: str) -> str | None:
+    """Build a compact live data context for the ad agent to reason over."""
+    analysis = ads_chat_analysis(user_id, store_id)
+    if not analysis:
+        return None
+    return (
+        "以下是系统刚刚从用户已导入的广告搜索词报表中实时聚合出的真实数据摘要。"
+        "你必须基于这些数据回答，不要声称没有收到报表，不要使用样例或 Mock 数据。\n\n"
+        f"{analysis}\n\n"
+        "回答要求：根据用户具体问题选择分析角度；如果用户只笼统要求分析，"
+        "请给出最重要的 3-5 条可执行动作，并说明依据、风险和下一步。"
+        "金额单位未知，只能沿用数字本身，禁止标 USD、人民币、¥ 或 $。"
+        "没有毛利、成本和目标 ACOS 时，禁止计算利润/亏损金额，只能评价花费、销售额和 ACOS。"
+        "不要自行把金额翻倍；不要引用上下文里没有提供的规则表参数。"
+    )
 
 
 def competitor_rows(user_id: str, store_id: str, limit: int = 20) -> list[dict[str, Any]]:

@@ -140,7 +140,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 /* ---------- CHAT (home) ---------- */
 .chatview{flex:1;display:flex;flex-direction:column;min-height:0}
 .chatscroll{flex:1;overflow-y:auto;padding:26px 20px 20px}
-.chatinner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.chatinner{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 .hello{text-align:center;padding:36px 0 14px}
 .hello .mk{width:52px;height:52px;border-radius:14px;background:var(--accent);display:grid;place-items:center;margin:0 auto 16px}
 .hello .mk svg{width:26px;height:26px;color:#fff}
@@ -164,6 +164,31 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .turn.u .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:5px;display:inline-block}
 .turn.a .bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:5px}
 .turn.a .bubble.bare{background:none;border:none;padding:0}
+.turn.a .bubble:not(.bare){max-width:100%;overflow:hidden}
+.md{display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}
+.md p{margin:0}
+.md h2,.md h3{font-size:15px;font-weight:700;margin:6px 0 0;display:flex;align-items:center;gap:7px}
+.md h4{font-size:13px;font-weight:700;color:var(--dim);margin:2px 0 0}
+.md ul,.md ol{margin:0;padding-left:20px}
+.md li{margin:3px 0}
+.md blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-weak);border-radius:0 8px 8px 0;color:var(--dim)}
+.md code{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+.md pre{margin:0;overflow-x:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
+.md pre code{display:block;background:none;border:none;padding:0;white-space:pre;font-size:12px;line-height:1.55}
+.md hr{border:none;border-top:1px solid var(--border);margin:2px 0}
+.md b{font-weight:700}
+.md-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin:2px 0 4px}
+.md-table{width:100%;min-width:560px;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.md-table th{background:var(--surface-2);color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;padding:9px 11px;border-bottom:1px solid var(--border);white-space:nowrap}
+.md-table td{padding:10px 11px;border-bottom:1px solid var(--border);vertical-align:top;white-space:nowrap}
+.md-table td.num,.md-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.md-table tr:last-child td{border-bottom:none}
+.md-table td:first-child,.md-table th:first-child{font-weight:600;color:var(--text)}
+@media(max-width:700px){
+  .chatinner{max-width:100%}
+  .chatscroll{padding:18px 12px}
+  .md-table{min-width:520px}
+}
 .step{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .step .sp{width:13px;height:13px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -466,8 +491,9 @@ button.imgbox{font-family:inherit}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:26px;height:26px;margin-bottom:8px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
               <div style="font-size:13.5px;color:var(--text);font-weight:500">点击选择文件，或拖拽到此处</div>
               <div style="font-size:12px;margin-top:4px">.xlsx / .csv · 单文件 ≤ 20MB</div>
-              <input type="file" id="fileInp" hidden>
+              <input type="file" id="fileInp" accept=".xlsx,.xlsm,.csv" hidden>
             </label>
+            <div id="uploadStatus" role="status" aria-live="polite" style="display:none;margin-top:10px;font-size:13px;color:var(--dim)"></div>
             <div id="mapping" style="display:none;margin-top:16px">
               <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span class="pill good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:11px;height:11px"><path d="M20 6L9 17l-5-5"/></svg>已解析</span><b id="fileName"></b><span id="fileMeta" style="color:var(--dim)"></span></div>
               <p style="font-size:12.5px;color:var(--dim);margin:0 0 10px">确认列与字段的对应关系：</p>
@@ -599,7 +625,7 @@ button.imgbox{font-family:inherit}
     desc:'High-quality '+nm+' designed to solve real customer pain points, with keyword-rich copy ready for Amazon.',
     kw:[String(nm).toLowerCase(),'best seller alternative','gift idea','durable '+ct]};}
 
-  let selected=null, started=false;
+  let selected=null, started=false, chatHistory=[];
   const AV_A='<div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></div>';
 
   function ensureStarted(){if(!started){started=true;$('#hello').remove();}}
@@ -609,6 +635,12 @@ button.imgbox{font-family:inherit}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
   function scrollDown(){requestAnimationFrame(()=>scroll.scrollTop=scroll.scrollHeight);}
+  function remember(role,content){
+    const text=String(content||'').replace(/\s+/g,' ').trim();
+    if(!text)return;
+    chatHistory.push({role,content:text.slice(0,4000)});
+    if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
+  }
 
   function thinking(label,then){
     const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'+label+'</div></div>');
@@ -679,6 +711,7 @@ button.imgbox{font-family:inherit}
   // 轻量意图路由：把请求分到对应的真智能体，其余走通用。顺序=从具体到宽泛。
   function pickAgent(q){q=(q||'').toLowerCase();
     if(/(合规|违规|禁词|极限词|审一?下|审核|侵权|能不能用|违禁)/.test(q))return 'compliance';
+    if(/(广告|acos|竞价|否词|否定词|加预算|降价|搜索词报表|广告报表|ppc|campaign|search term)/.test(q))return 'ads';
     if(/(拆解|拆一下|竞品|对标|爆款|逆向|asin|b0[0-9a-z]{8})/.test(q))return 'teardown';
     if(/(选品|机会商品|机会|值得做|要不要做|能不能做|挖|蓝海|选个?品)/.test(q))return 'selection';
     if(/(市场|类目|赛道|红海|竞争格局|体量|价格带|研判|大盘|供需)/.test(q))return 'market';
@@ -690,16 +723,68 @@ button.imgbox{font-family:inherit}
     return (v&&v!=='auto')?v:pickAgent(text);}
   // 智能体 key→中文名，初始给默认值，init 时用 /api/agents 覆盖为注册表真实展示名。
   let AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',
-    imagery:'#3 图文提示词',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
+    imagery:'#3 图文提示词',ads:'#4 广告优化',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
   // 把当前店铺/站点作为上下文带给后端（仅拼进发送内容，气泡仍只显示用户原话）。
   function storeContext(){const s=stores.find(x=>x.id===curStore);
     return s?`【店铺上下文：${s.name} · ${MK[s.mk]}站(${s.mk})】\n`:'';}
-  // 极简 markdown → HTML：转义后处理 **粗体**、`代码`、换行。
-  function fmt(s){let h=esc(String(s==null?'':s));
-    h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>');
-    return h.replace(/\n/g,'<br>');}
+  // 轻量 markdown -> 产品化消息块：标题、段落、列表、引用、代码块、表格、粗体、代码。
+  const mdPlaceholders=[];
+  function stash(html){const key='@@MD'+mdPlaceholders.length+'@@';mdPlaceholders.push([key,html]);return key;}
+  function inlineFmt(s){
+    mdPlaceholders.length=0;
+    let h=esc(String(s==null?'':s));
+    h=h.replace(/`([^`]+?)`/g,(_,x)=>stash('<code>'+esc(x)+'</code>'));
+    h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<b>$1</b>');
+    h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    for(const [key,val] of mdPlaceholders)h=h.split(key).join(val);
+    return h;
+  }
+  function tableCells(line){let raw=line.trim();if(raw.startsWith('|'))raw=raw.slice(1);if(raw.endsWith('|'))raw=raw.slice(0,-1);return raw.split('|').map(x=>x.trim());}
+  function isTableSep(line){const cells=tableCells(line);return cells.length>1&&cells.every(c=>/^:?-{3,}:?$/.test(c));}
+  function looksLikeTableRow(line){const t=line.trim();return t.includes('|')&&(t.startsWith('|')||/\s\|\s/.test(t));}
+  function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
+  function renderTable(lines,start){
+    const head=tableCells(lines[start]), rows=[];let i=start+(isTableSep(lines[start+1]||'')?2:1);
+    while(i<lines.length&&looksLikeTableRow(lines[i])&&!isTableSep(lines[i])){rows.push(tableCells(lines[i]));i++;}
+    const colCount=Math.max(head.length,...rows.map(r=>r.length));
+    const norm=a=>Array.from({length:colCount},(_,idx)=>a[idx]||'');
+    const header=norm(head), bodyRows=rows.map(norm);
+    const th=header.map((c,idx)=>'<th class="'+(bodyRows.every(r=>!r[idx]||isNumericCell(r[idx]))?'num':'')+'">'+inlineFmt(c)+'</th>').join('');
+    const body=bodyRows.map(r=>'<tr>'+r.map(c=>'<td class="'+(isNumericCell(c)?'num':'')+'">'+inlineFmt(c)+'</td>').join('')+'</tr>').join('');
+    return {html:'<div class="md-table-wrap"><table class="md-table"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table></div>',next:i};
+  }
+  function renderList(items,ordered){return '<'+(ordered?'ol':'ul')+'>'+items.map(x=>'<li>'+inlineFmt(x)+'</li>').join('')+'</'+(ordered?'ol':'ul')+'>';}
+  function fmt(s){
+    const lines=String(s==null?'':s).replace(/\r\n/g,'\n').split('\n');
+    const out=[];let p=[],list=null,listOrdered=false,quote=[];
+    const flushP=()=>{if(p.length){out.push('<p>'+p.map(inlineFmt).join('<br>')+'</p>');p=[];}};
+    const flushList=()=>{if(list){out.push(renderList(list,listOrdered));list=null;}};
+    const flushQuote=()=>{if(quote.length){out.push('<blockquote>'+quote.map(inlineFmt).join('<br>')+'</blockquote>');quote=[];}};
+    const flushAll=()=>{flushP();flushList();flushQuote();};
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i], trimmed=line.trim();
+      if(/^```/.test(trimmed)){
+        flushAll();const code=[];i++;
+        while(i<lines.length&&!/^```/.test(lines[i].trim())){code.push(lines[i]);i++;}
+        out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');continue;
+      }
+      if(!trimmed){flushAll();continue;}
+      if(/^---+$/.test(trimmed)){flushAll();out.push('<hr>');continue;}
+      if(looksLikeTableRow(trimmed)&&(isTableSep(lines[i+1]||'')||looksLikeTableRow(lines[i+1]||''))){flushAll();const t=renderTable(lines,i);out.push(t.html);i=t.next-1;continue;}
+      const h=trimmed.match(/^(#{2,4})\s+(.+)$/);
+      if(h){flushAll();const tag=h[1].length===4?'h4':h[1].length===3?'h3':'h2';out.push('<'+tag+'>'+inlineFmt(h[2])+'</'+tag+'>');continue;}
+      const q=trimmed.match(/^>\s?(.*)$/);
+      if(q){flushP();flushList();quote.push(q[1]);continue;}
+      const li=trimmed.match(/^[-*]\s+(.+)$/), oli=trimmed.match(/^\d+[.)]\s+(.+)$/);
+      if(li||oli){flushP();flushQuote();const ordered=Boolean(oli);if(list&&listOrdered!==ordered)flushList();if(!list){list=[];listOrdered=ordered;}list.push((li||oli)[1]);continue;}
+      flushList();flushQuote();p.push(line);
+    }
+    flushAll();
+    return '<div class="md">'+out.join('')+'</div>';
+  }
   async function respondReal(text){
     const agent=chosenAgent(text);
+    const history=chatHistory.slice(-8);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
     const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
@@ -709,7 +794,7 @@ button.imgbox{font-family:inherit}
     const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
       if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
       const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
       while(true){
@@ -734,6 +819,7 @@ button.imgbox{font-family:inherit}
           }else if(evt.type==='final'){
             gotFinal=true;
             const full=evt.reply||raw;
+            remember('assistant',full);
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
             if(ans){ans.querySelector('.bubble').innerHTML='<div>'+fmt(full)+'</div>'+badge;}
             else{if(think)think.remove();addAgent('<div class="bubble"><div>'+fmt(full)+'</div>'+badge+'</div>');}
@@ -747,8 +833,9 @@ button.imgbox{font-family:inherit}
       if(!gotFinal)throw new Error('流式连接中断（无 final 事件）');
     }catch(e){
       if(ans)ans.remove();if(think)think.remove();
-      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
         if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+        remember('assistant',d.reply);
         const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
         const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">兼容模式 · 调用工具：${esc(tools.join(', '))}</div>`:'';
         addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
@@ -792,8 +879,9 @@ button.imgbox{font-family:inherit}
   }
 
   /* input handling */
-  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();
-    if(chosenAgent(text)==='selection')respondSelection(text.trim());else respondReal(text.trim());}
+  function submitInput(text){const clean=text.trim();if(!clean)return;addUser(clean);$('#chatInp').value='';autosize();
+    if(chosenAgent(clean)==='selection'){remember('user',clean);respondSelection(clean);}
+    else{respondReal(clean);remember('user',clean);}}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
@@ -807,7 +895,7 @@ button.imgbox{font-family:inherit}
     const ai=e.target.closest('.addImg');if(ai){addImgFromChat(ai.dataset.k,decodeURIComponent(ai.dataset.bg),ai.dataset.role);return;}
     const gi=e.target.closest('.gotoImg');if(gi){go('listing');openEditor(opps.find(o=>o.key===gi.dataset.k)||{...OPP[gi.dataset.k]});return;}
   });
-  $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;location.reload();};
+  $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;chatHistory=[];location.reload();};
 
   /* ---------- module: 机会上新（后端持久化 CRUD，B1） ---------- */
   let opps=[];
@@ -955,15 +1043,17 @@ button.imgbox{font-family:inherit}
   let importPreview=null;
   const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['title','商品标题'],['brand','品牌'],['price','价格'],['rating','评分'],['review_count','评论数'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['stock','库存'],['order_id','订单号']];
   $('#fileInp').onchange=async e=>{const file=e.target.files[0];if(!file)return;
-    const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent=' · 正在解析…';
+    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';status.textContent=`正在上传并解析 ${file.name}…`;
+    const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent='';
     try{const r=await fetch('/api/imports/preview',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
       importPreview=await r.json();$('#fileMeta').textContent=` · ${importPreview.row_count} 行 · ${importPreview.columns.length} 列`;
+      status.style.color='var(--good)';status.textContent=`解析完成：${importPreview.row_count} 行、${importPreview.columns.length} 列，请确认字段映射。`;
+      $('#mapping').style.display='block';
       const tbl=$('#mappingTbl');tbl.innerHTML='<tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>';
       importPreview.columns.forEach(c=>{const tr=tbl.insertRow(-1),example=(importPreview.preview[0]||{})[c]??'';
         tr.innerHTML=`<td class="mono">${esc(c)}</td><td>${esc(String(example))}</td><td><select data-col="${esc(c)}">${mapFields.map(([v,l])=>`<option value="${v}"${importPreview.mapping[c]===v?' selected':''}>${l}</option>`).join('')}</select></td>`;});
-      $('#mapping').style.display='block';
-    }catch(err){toast('解析失败：'+String(err.message||err));$('#mapping').style.display='none';}};
-  $('#cancelMap').onclick=()=>{$('#mapping').style.display='none';$('#fileInp').value='';};
+    }catch(err){const message=String(err.message||err);status.style.color='var(--crit)';status.textContent='解析失败：'+message;toast('解析失败：'+message);$('#mapping').style.display='none';}};
+  $('#cancelMap').onclick=()=>{$('#mapping').style.display='none';$('#uploadStatus').style.display='none';$('#fileInp').value='';};
   $('#confirmMap').onclick=async()=>{const file=$('#fileInp').files[0];if(!file||!importPreview)return;
     const mapping={};$$('#mappingTbl select').forEach(s=>{if(s.value)mapping[s.dataset.col]=s.value;});
     const fd=new FormData();fd.append('file',file);fd.append('mapping',JSON.stringify(mapping));

@@ -25,18 +25,21 @@ import threading  # noqa: E402
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 from config.settings import settings  # noqa: E402
 from tradeflow import registry  # noqa: E402
 from tradeflow.agent.loop import AgentStep  # noqa: E402
+from tradeflow.compose import compose_system_prompt  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
+from tradeflow.llm.base import Message, Role  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
 from web import store  # noqa: E402
+from web.import_tools import build_import_tools  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
-from web.import_service import (ads_overview, competitor_rows, list_imports,
+from web.import_service import (ads_chat_context, ads_overview, competitor_rows, list_imports,
                                 parse_upload, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
@@ -119,9 +122,15 @@ def _build_agent(agent_key: str, observer):
     return build_agent(observer=observer)
 
 
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
 class ChatIn(BaseModel):
     message: str
     agent: str = "default"
+    history: List[ChatTurn] = Field(default_factory=list)
 
 
 class ChatOut(BaseModel):
@@ -129,6 +138,116 @@ class ChatOut(BaseModel):
     iterations: int
     stopped_early: bool
     steps: List[Dict[str, Any]]
+
+
+def _history_text(history: List[ChatTurn]) -> str:
+    return "\n".join(f"{h.role}: {h.content}" for h in history[-8:])
+
+
+def _to_messages(history: List[ChatTurn]) -> List[Message]:
+    messages: List[Message] = []
+    for item in history[-8:]:
+        role = Role.ASSISTANT if item.role == "assistant" else Role.USER
+        if item.content.strip():
+            messages.append(Message(role=role, content=item.content[-4000:]))
+    return messages
+
+
+def _imported_report_chat_context(message: str, user_id: str, store_id: str,
+                                  history: List[ChatTurn] | None = None) -> str | None:
+    text = (message + "\n" + _history_text(history or [])).lower()
+    asks_ads = any(k in text for k in ("广告", "acos", "竞价", "否词", "否定", "加预算", "降价", "搜索词"))
+    asks_imported = any(k in text for k in ("导入", "报表", "刚上传", "刚导", "excel", "xlsx", "csv"))
+    if not (asks_ads and asks_imported):
+        return None
+    context = ads_chat_context(user_id, store_id)
+    if context:
+        return context
+    return "我还没有读到已导入的广告搜索词报表。请先到「数据导入」上传广告报表，并确认字段映射后再让我分析。"
+
+
+def _build_imported_ads_agent(observer=None):
+    prompt = compose_system_prompt("ads") + (
+        "\n\n# 当前任务\n"
+        "用户正在通过对话分析已经上传并入库的广告报表。报表上下文会作为用户消息的一部分提供。"
+        "你要像真实广告优化师一样根据用户问题动态分析，而不是复述固定模板。"
+        "如果上下文中已有足够数据，直接给结论；如果缺少成本、毛利或目标 ACOS，则明确标注缺口。"
+        "严禁引用未提供的规则表、阈值或币种；金额单位保持上下文原样。"
+        "没有毛利、成本和目标 ACOS 时，不能计算利润/亏损金额，只能基于花费、销售额、订单和 ACOS 判断优先级。"
+        "销售额不是利润，禁止用 花费-销售额 或 ACOS>100% 直接声称明确亏损。"
+    )
+    return build_agent(system_prompt=prompt, tools=[], observer=observer)
+
+
+def _imported_ads_user_input(original_message: str, context: str, history: List[ChatTurn]) -> str:
+    history_block = _history_text(history)
+    return (
+        f"最近对话上下文：\n{history_block or '（无）'}\n\n"
+        f"用户原始问题：{original_message}\n\n"
+        f"{context}\n\n"
+        "请基于上面的真实导入数据回答用户问题。"
+    )
+
+
+def _sanitize_imported_ads_reply(reply: str) -> str:
+    replacements = {
+        "实质性亏损性花费": "高风险广告花费",
+        "明确亏损": "ACOS 明显偏高",
+        "实际已亏": "存在明显广告效率风险",
+        "典型的「负向 ROI」活动": "典型的低效广告活动",
+        "负向 ROI": "低效 ROI",
+        "每单广告净亏": "单均广告花费偏高",
+        "净亏": "广告花费偏高",
+        "亏损型活动": "高 ACOS 活动",
+        "亏损活动": "高 ACOS 活动",
+        "亏损性": "高风险",
+        "亏损": "高风险消耗",
+        "花出去的钱比赚回来的多": "广告花费高于广告归因销售额",
+        "花费比销售额还高": "广告花费高于广告归因销售额",
+    }
+    out = reply
+    for src, dst in replacements.items():
+        out = out.replace(src, dst)
+    return out
+
+
+def _is_import_data_query(message: str, history: List[ChatTurn] | None = None) -> bool:
+    text = (message + "\n" + _history_text(history or [])).lower()
+    return any(k in text for k in (
+        "导入", "报表", "文件", "excel", "xlsx", "csv", "刚上传", "刚导",
+        "数据", "订单", "库存", "广告", "acos", "搜索词", "sku", "第二个", "继续",
+    ))
+
+
+def _build_import_data_agent(user_id: str, store_id: str, observer=None):
+    prompt = (
+        "你是 TradeFlow-AI 的通用导入数据分析智能体。用户上传的 Excel/CSV 已经入库，"
+        "你不能假设只分析某一种文件，也不能声称没有收到文件，除非工具返回确实没有数据。\n\n"
+        "工作方式：\n"
+        "1. 根据用户问题和最近对话，自己决定调用哪些工具。\n"
+        "2. 不知道有哪些文件时，先调用 list_imported_files。\n"
+        "3. 不知道字段含义时，调用 inspect_imported_file 看字段、样例和数字列概览。\n"
+        "4. 需要汇总排行、分组对比、筛选明细时，调用 aggregate_imported_file 或 sample_imported_rows。\n"
+        "5. 工具结果不足以回答时，可以继续调用工具；足够时再结束。\n\n"
+        "边界：只基于工具返回的真实导入数据。金额没有币种时不要加币种。"
+        "销售额不是利润；没有成本、毛利、回款率时不要计算利润/亏损金额。"
+        "可以说 ACOS 高、广告效率风险高、花费高于广告归因销售额，但不要说明确亏损。"
+        "回答要贴近用户 query；用户追问“第二个/继续/为什么”时，要结合最近对话上下文理解指代。"
+    )
+    return build_agent(
+        system_prompt=prompt,
+        tools=build_import_tools(user_id, store_id),
+        observer=observer,
+        max_iterations=12,
+    )
+
+
+def _import_data_user_input(message: str, history: List[ChatTurn]) -> str:
+    return (
+        f"最近对话上下文：\n{_history_text(history) or '（无）'}\n\n"
+        f"用户当前问题：{message}\n\n"
+        "请按需调用导入数据工具进行实时分析。"
+    )
 
 
 @app.get("/")
@@ -258,7 +377,8 @@ def opportunities_suggest(body: OppSuggestIn,
 
 
 @app.post("/api/chat", response_model=ChatOut)
-def chat(body: ChatIn) -> ChatOut:
+def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
+         x_tradeflow_store: str = Header(default="default")) -> ChatOut:
     steps: List[Dict[str, Any]] = []
 
     def observe(step: AgentStep) -> None:
@@ -269,9 +389,19 @@ def chat(body: ChatIn) -> ChatOut:
             "tools": step.tool_calls,
         })
 
+    if _is_import_data_query(body.message, body.history):
+        result = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, observe).run(
+            _import_data_user_input(body.message, body.history))
+        return ChatOut(
+            reply=_sanitize_imported_ads_reply(result.output),
+            iterations=result.iterations,
+            stopped_early=result.stopped_early,
+            steps=steps,
+        )
+
     # Fresh agent per request → clean, single-turn conversations (no shared state).
     agent = _build_agent(body.agent, observe)
-    result = agent.run(body.message)
+    result = agent.run(body.message, history=_to_messages(body.history))
     return ChatOut(
         reply=result.output,
         iterations=result.iterations,
@@ -286,7 +416,8 @@ def _sse(event: Dict[str, Any]) -> str:
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(body: ChatIn) -> StreamingResponse:
+async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
+                      x_tradeflow_store: str = Header(default="default")) -> StreamingResponse:
     """SSE 流式版对话：边跑边把进度推给前端，避免长任务（抓竞品等）看起来像卡死。
 
     agent.run_stream 逐事件产出：("tools",…) 本轮要调的工具、("token",…) 最终答案的
@@ -301,8 +432,16 @@ async def chat_stream(body: ChatIn) -> StreamingResponse:
 
     def run_agent() -> None:
         try:
-            agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
-            for kind, payload in agent.run_stream(body.message):
+            is_import_query = _is_import_data_query(body.message, body.history)
+            if is_import_query:
+                agent = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, lambda _step: None)
+                user_input = _import_data_user_input(body.message, body.history)
+                history = None
+            else:
+                agent = _build_agent(body.agent, lambda _step: None)  # 流式下不用 observer
+                user_input = body.message
+                history = _to_messages(body.history)
+            for kind, payload in agent.run_stream(user_input, history=history):
                 if kind == "token":
                     push({"type": "token", "text": payload})
                 elif kind == "reset":
@@ -311,7 +450,8 @@ async def chat_stream(body: ChatIn) -> StreamingResponse:
                     push({"type": "status", "tools": payload,
                           "message": "正在调用工具：" + "、".join(payload) + " …"})
                 elif kind == "final":
-                    push({"type": "final", "reply": payload.output,
+                    reply = _sanitize_imported_ads_reply(payload.output) if is_import_query else payload.output
+                    push({"type": "final", "reply": reply,
                           "iterations": payload.iterations,
                           "stopped_early": payload.stopped_early})
         except Exception as exc:  # noqa: BLE001 —— 把错误推给前端而非静默
