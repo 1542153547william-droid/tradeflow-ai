@@ -122,7 +122,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .new-chat:hover{background:var(--surface-2)}
 .new-chat svg{width:16px;height:16px}
 .history{margin-top:6px}
-.hist-item{display:block;width:100%;text-align:left;border:none;background:none;color:var(--dim);
+.hist-item{display:block;width:100%;text-align:left;border:none;background:none;color:var(--dim);cursor:pointer;
   font-size:12.5px;padding:7px 11px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hist-item:hover{background:var(--surface-2);color:var(--text)}
 .hist-item.active{background:var(--good-weak);color:var(--text);font-weight:600}
@@ -633,6 +633,30 @@ button.imgbox{font-family:inherit}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
   function scrollDown(){requestAnimationFrame(()=>scroll.scrollTop=scroll.scrollHeight);}
+  function setActiveHistoryItem(id){
+    $$('#chatHistoryList .hist-item').forEach(btn=>btn.classList.toggle('active',btn.dataset.chatId===id));
+  }
+  function renderChatSessionItems(box,items){
+    box.innerHTML='';
+    if(!items.length){
+      box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+      return;
+    }
+    items.forEach(s=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='hist-item'+(s.id===currentChatId?' active':'');
+      btn.dataset.chatId=s.id;
+      btn.title=s.title||'新对话';
+      btn.textContent=s.title||'新对话';
+      btn.addEventListener('click',e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        loadChatSession(s.id);
+      });
+      box.appendChild(btn);
+    });
+  }
   async function loadChatSessions(autoOpenLatest=false){
     const box=$('#chatHistoryList');if(!box)return;
     try{
@@ -640,8 +664,7 @@ button.imgbox{font-family:inherit}
       if(!r.ok)throw new Error('HTTP '+r.status);
       let d=await r.json();
       const items=d.items||[];
-      box.innerHTML=items.length?items.map(s=>`<button class="hist-item${s.id===currentChatId?' active':''}" data-chat-id="${esc(s.id)}">${esc(s.title||'新对话')}</button>`).join('')
-        :'<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+      renderChatSessionItems(box,items);
       if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
     }catch(e){
       console.warn('chat history load failed',e);
@@ -649,8 +672,7 @@ button.imgbox{font-family:inherit}
         const r=await nativeFetch('/api/chat/sessions',{headers:{'X-TradeFlow-Store':'default'}});
         if(!r.ok)throw new Error('fallback HTTP '+r.status);
         const d=await r.json(),items=d.items||[];
-        box.innerHTML=items.length?items.map(s=>`<button class="hist-item${s.id===currentChatId?' active':''}" data-chat-id="${esc(s.id)}">${esc(s.title||'新对话')}</button>`).join('')
-          :'<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+        renderChatSessionItems(box,items);
         if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
       }catch(fallbackError){
         console.warn('chat history fallback failed',fallbackError);
@@ -676,8 +698,13 @@ button.imgbox{font-family:inherit}
   }
   async function loadChatSession(id){
     try{
-      const d=await (await fetch('/api/chat/sessions/'+encodeURIComponent(id))).json();
+      currentChatId=id;setActiveHistoryItem(id);go('chat');
+      const r=await fetch('/api/chat/sessions/'+encodeURIComponent(id));
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
       currentChatId=id;inner.innerHTML='';started=false;selected=null;chatHistory=[];
+      const agentSel=$('#agentSel');
+      if(agentSel&&d.agent&&[...agentSel.options].some(o=>o.value===d.agent))agentSel.value=d.agent;
       const messages=d.messages||[];
       if(!messages.length){inner.innerHTML=HELLO_HTML;started=false;}
       messages.forEach(m=>{
@@ -689,7 +716,8 @@ button.imgbox{font-family:inherit}
       loadChatSessions();scrollDown();go('chat');
     }catch(e){
       console.warn('chat session load failed',e);
-      currentChatId=null;inner.innerHTML=HELLO_HTML;started=false;chatHistory=[];loadChatSessions();
+      toast('历史对话打开失败');
+      currentChatId=null;setActiveHistoryItem(null);loadChatSessions();
     }
   }
   function remember(role,content,persist=true){
