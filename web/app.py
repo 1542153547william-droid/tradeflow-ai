@@ -677,4 +677,12 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
                                       "X-Accel-Buffering": "no"})
 
 
+@app.get("/static/prototype.html")
+def prototype_static() -> FileResponse:
+    return FileResponse(
+        STATIC / "prototype.html",
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
+    )
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

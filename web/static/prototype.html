@@ -687,7 +687,10 @@ button.imgbox{font-family:inherit}
       });
       if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
       loadChatSessions();scrollDown();go('chat');
-    }catch(e){toast('历史对话加载失败');}
+    }catch(e){
+      console.warn('chat session load failed',e);
+      currentChatId=null;inner.innerHTML=HELLO_HTML;started=false;chatHistory=[];loadChatSessions();
+    }
   }
   function remember(role,content,persist=true){
     const text=String(content||'').replace(/\s+/g,' ').trim();
