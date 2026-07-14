@@ -172,6 +172,8 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .md h4{font-size:13px;font-weight:700;color:var(--dim);margin:2px 0 0}
 .md ul,.md ol{margin:0;padding-left:20px}
 .md li{margin:3px 0}
+.md li::marker{color:var(--accent)}
+.md .arrow-line{color:var(--dim);background:var(--surface-2);border-radius:8px;padding:6px 9px;font-size:13px}
 .md blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-weak);border-radius:0 8px 8px 0;color:var(--dim)}
 .md code{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
 .md pre{margin:0;overflow-x:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
@@ -830,6 +832,20 @@ button.imgbox{font-family:inherit}
   function isTableSep(line){const cells=tableCells(line);return cells.length>1&&cells.every(c=>/^:?-{3,}:?$/.test(c));}
   function looksLikeTableRow(line){const t=line.trim();return t.includes('|')&&(t.startsWith('|')||/\s\|\s/.test(t));}
   function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
+  function normalizeAssistantText(s){
+    let t=String(s==null?'':s).replace(/\r\n/g,'\n');
+    // 有些模型会把整段说明压成一行：---、✅ 1.、▪、→ 全挤在一起。
+    // 这里在展示层做温和断行，历史消息重新打开时也能变清爽。
+    t=t.replace(/\s+---\s+/g,'\n\n---\n\n');
+    t=t.replace(/\s+(✅\s*\d+[.)]\s*)/g,'\n\n$1');
+    t=t.replace(/(✅\s*\d+[.)]\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
+    t=t.replace(/[；;]\s*[▪■]\s*/g,'；\n- ');
+    t=t.replace(/\s+[▪■]\s*/g,'\n- ');
+    t=t.replace(/([。；;])\s*→\s*/g,'$1\n→ ');
+    t=t.replace(/\s+(→\s*调用\s+)/g,'\n$1');
+    t=t.replace(/\n{3,}/g,'\n\n');
+    return t.trim();
+  }
   function renderTable(lines,start){
     const head=tableCells(lines[start]), rows=[];let i=start+(isTableSep(lines[start+1]||'')?2:1);
     while(i<lines.length&&looksLikeTableRow(lines[i])&&!isTableSep(lines[i])){rows.push(tableCells(lines[i]));i++;}
@@ -842,7 +858,7 @@ button.imgbox{font-family:inherit}
   }
   function renderList(items,ordered){return '<'+(ordered?'ol':'ul')+'>'+items.map(x=>'<li>'+inlineFmt(x)+'</li>').join('')+'</'+(ordered?'ol':'ul')+'>';}
   function fmt(s){
-    const lines=String(s==null?'':s).replace(/\r\n/g,'\n').split('\n');
+    const lines=normalizeAssistantText(s).split('\n');
     const out=[];let p=[],list=null,listOrdered=false,quote=[];
     const flushP=()=>{if(p.length){out.push('<p>'+p.map(inlineFmt).join('<br>')+'</p>');p=[];}};
     const flushList=()=>{if(list){out.push(renderList(list,listOrdered));list=null;}};
@@ -860,9 +876,12 @@ button.imgbox{font-family:inherit}
       if(looksLikeTableRow(trimmed)&&(isTableSep(lines[i+1]||'')||looksLikeTableRow(lines[i+1]||''))){flushAll();const t=renderTable(lines,i);out.push(t.html);i=t.next-1;continue;}
       const h=trimmed.match(/^(#{2,4})\s+(.+)$/);
       if(h){flushAll();const tag=h[1].length===4?'h4':h[1].length===3?'h3':'h2';out.push('<'+tag+'>'+inlineFmt(h[2])+'</'+tag+'>');continue;}
+      const checked=trimmed.match(/^✅\s*(\d+)[.)]\s+(.+)$/);
+      if(checked){flushAll();out.push('<h3>✅ '+checked[1]+'. '+inlineFmt(checked[2])+'</h3>');continue;}
+      if(/^→\s*/.test(trimmed)){flushAll();out.push('<div class="arrow-line">'+inlineFmt(trimmed)+'</div>');continue;}
       const q=trimmed.match(/^>\s?(.*)$/);
       if(q){flushP();flushList();quote.push(q[1]);continue;}
-      const li=trimmed.match(/^[-*]\s+(.+)$/), oli=trimmed.match(/^\d+[.)]\s+(.+)$/);
+      const li=trimmed.match(/^[-*•▪■]\s+(.+)$/), oli=trimmed.match(/^\d+[.)]\s+(.+)$/);
       if(li||oli){flushP();flushQuote();const ordered=Boolean(oli);if(list&&listOrdered!==ordered)flushList();if(!list){list=[];listOrdered=ordered;}list.push((li||oli)[1]);continue;}
       flushList();flushQuote();p.push(line);
     }
