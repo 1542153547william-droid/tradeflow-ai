@@ -626,7 +626,7 @@ button.imgbox{font-family:inherit}
   const HELLO_HTML=$('#hello').outerHTML;
   const AV_A='<div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></div>';
 
-  function ensureStarted(){if(!started){started=true;$('#hello').remove();}}
+  function ensureStarted(){if(!started){started=true;const hello=$('#hello');if(hello)hello.remove();}}
   function addUser(text){ensureStarted();const t=document.createElement('div');t.className='turn u';
     t.innerHTML='<div class="av">你</div><div class="body"><div class="bubble">'+esc(text)+'</div></div>';
     inner.appendChild(t);scrollDown();}
@@ -702,11 +702,12 @@ button.imgbox{font-family:inherit}
       const r=await fetch('/api/chat/sessions/'+encodeURIComponent(id));
       if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
-      currentChatId=id;inner.innerHTML='';started=false;selected=null;chatHistory=[];
+      currentChatId=id;inner.innerHTML='';selected=null;chatHistory=[];
       const agentSel=$('#agentSel');
       if(agentSel&&d.agent&&[...agentSel.options].some(o=>o.value===d.agent))agentSel.value=d.agent;
       const messages=d.messages||[];
       if(!messages.length){inner.innerHTML=HELLO_HTML;started=false;}
+      else{started=true;}
       messages.forEach(m=>{
         const content=String(m.content||'');
         if(m.role==='user')addUser(content);else addAgent('<div class="bubble"><div>'+fmt(content)+'</div></div>');
