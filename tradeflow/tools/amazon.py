@@ -24,6 +24,12 @@ from .base import tool
 _SEARCH_TIMEOUT = 300.0
 _POLL_INTERVAL = 3.0        # 轮询异步任务的间隔（秒）
 
+# query-system 是本地/内网回环服务，绝不能走系统代理（如大陆机器上的 Clash/翻墙代理）：
+# 否则内网请求会被代理接管、回环失败而报 502。trust_env=False 让 httpx 忽略
+# HTTP_PROXY/HTTPS_PROXY 等环境变量，直连查询系统。出海抓亚马逊是 query-system 内部
+# 用它自己的 scraper_proxy 负责的另一跳，与这里无关。
+_NO_PROXY = {"trust_env": False}
+
 
 def _compact(result: Dict[str, Any]) -> Dict[str, Any]:
     """裁掉对分析无用、又占 token 的字段（主图 URL、富文本、历史价格明细），
@@ -79,7 +85,7 @@ def search_products(keyword: str, platform: str = "amazon", top_n: int = 10,
     import time
     base = settings.query_api_url
     try:
-        sub = httpx.post(f"{base}/api/search/async", json=payload, timeout=30.0)
+        sub = httpx.post(f"{base}/api/search/async", json=payload, timeout=30.0, **_NO_PROXY)
         sub.raise_for_status()
         task_id = sub.json().get("taskId")
         if not task_id:
@@ -87,7 +93,7 @@ def search_products(keyword: str, platform: str = "amazon", top_n: int = 10,
         deadline = time.time() + _SEARCH_TIMEOUT
         while time.time() < deadline:
             time.sleep(_POLL_INTERVAL)
-            st = httpx.get(f"{base}/api/tasks/{task_id}", timeout=15.0).json()
+            st = httpx.get(f"{base}/api/tasks/{task_id}", timeout=15.0, **_NO_PROXY).json()
             status = st.get("status")
             if status == "success":
                 return _compact(st.get("result") or {})
@@ -117,7 +123,7 @@ def get_product_by_asin(asin: str, platform: str = "amazon",
         params["marketplace"] = marketplace
     try:
         resp = httpx.get(f"{settings.query_api_url}/api/product/{asin}",
-                         params=params, timeout=_SEARCH_TIMEOUT)
+                         params=params, timeout=_SEARCH_TIMEOUT, **_NO_PROXY)
         resp.raise_for_status()
         return _compact(resp.json())
     except httpx.HTTPError as exc:
@@ -132,7 +138,7 @@ def list_platforms() -> Dict[str, Any]:
     except ImportError:
         return {"error": "未安装 httpx。"}
     try:
-        resp = httpx.get(f"{settings.query_api_url}/api/platforms", timeout=15.0)
+        resp = httpx.get(f"{settings.query_api_url}/api/platforms", timeout=15.0, **_NO_PROXY)
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPError as exc:
