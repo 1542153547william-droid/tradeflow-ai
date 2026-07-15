@@ -834,11 +834,14 @@ button.imgbox{font-family:inherit}
   function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
   function normalizeAssistantText(s){
     let t=String(s==null?'':s).replace(/\r\n/g,'\n');
-    // 有些模型会把整段说明压成一行：---、✅ 1.、▪、→ 全挤在一起。
+    // 有些模型会把整段说明压成一行：##、###、✅ 1.、▪、→ 全挤在一起。
     // 这里在展示层做温和断行，历史消息重新打开时也能变清爽。
     t=t.replace(/\s+---\s+/g,'\n\n---\n\n');
+    t=t.replace(/\s+(#{2,4}\s+)/g,'\n\n$1');
     t=t.replace(/\s+(✅\s*\d+[.)]\s*)/g,'\n\n$1');
     t=t.replace(/(✅\s*\d+[.)]\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
+    t=t.replace(/(#{2,4}\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
+    t=t.replace(/\s+-\s+(?=(?:\*\*)?[A-Z0-9][A-Z0-9-]{2,}|立即|核实|优化|重新|加强|建立|需要|输入|扫描|返回|获取|检查|考虑)/g,'\n- ');
     t=t.replace(/[；;]\s*[▪■]\s*/g,'；\n- ');
     t=t.replace(/\s+[▪■]\s*/g,'\n- ');
     t=t.replace(/([。；;])\s*→\s*/g,'$1\n→ ');
