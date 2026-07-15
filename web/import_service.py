@@ -26,9 +26,12 @@ ALIASES = {
     "spend": {"spend", "花费", "广告花费"},
     "sales": {"7 day total sales", "7天总销售额", "销售额", "product sales"},
     "orders": {"7 day total orders", "7天总订单数(#)", "订单数", "quantity"},
+    "quantity": {"quantity", "qty", "数量", "购买数量"},
     "price": {"price", "价格", "售价"},
     "stock": {"stock", "库存", "库存数量"},
     "order_id": {"amazon-order-id", "order id", "订单号"},
+    "buyer": {"buyer", "buyer name", "customer", "customer name", "recipient name", "ship to name", "买家", "买家姓名", "收件人"},
+    "purchase_date": {"purchase date", "order date", "date", "下单时间", "购买日期", "下单日期"},
     "title": {"title", "product title", "商品标题", "标题"},
     "rating": {"rating", "star rating", "评分", "星级"},
     "review_count": {"review count", "reviews", "评论数", "评价数"},
@@ -235,9 +238,101 @@ def ads_overview(user_id: str, store_id: str) -> dict[str, Any]:
         c["acos"] = round(c["spend"] / c["sales"], 4) if c["sales"] else None
         c["ctr"] = round(c["clicks"] / c["impressions"], 4) if c["impressions"] else 0
         c["conversion_rate"] = round(c["orders"] / c["clicks"], 4) if c["clicks"] else 0
+        c["score"] = _ad_health_score(c)
+        c["severity"] = _ad_severity(c)
+        c["recommendations"] = _ad_recommendations(c)
         items.append(c)
     return {"items": sorted(items, key=lambda x: -x["spend"]), "source": "imported_report",
             "row_count": len(data)}
+
+
+def _ad_health_score(item: dict[str, Any]) -> int:
+    score = 90
+    acos = item.get("acos")
+    ctr = item.get("ctr") or 0
+    cvr = item.get("conversion_rate") or 0
+    if acos is None and item.get("spend", 0) >= 5:
+        score -= 35
+    elif acos is not None:
+        if acos >= 0.6:
+            score -= 35
+        elif acos >= 0.4:
+            score -= 22
+        elif acos >= 0.25:
+            score -= 10
+    if ctr < 0.003 and item.get("impressions", 0) >= 1000:
+        score -= 12
+    if cvr < 0.03 and item.get("clicks", 0) >= 20:
+        score -= 14
+    return max(0, min(100, round(score)))
+
+
+def _ad_severity(item: dict[str, Any]) -> str:
+    score = item.get("score", 0)
+    if score < 55:
+        return "crit"
+    if score < 78:
+        return "warn"
+    return "good"
+
+
+def _ad_recommendations(item: dict[str, Any]) -> list[dict[str, str]]:
+    recs: list[dict[str, str]] = []
+    spend = float(item.get("spend") or 0)
+    sales = float(item.get("sales") or 0)
+    orders = float(item.get("orders") or 0)
+    clicks = float(item.get("clicks") or 0)
+    impressions = float(item.get("impressions") or 0)
+    acos = item.get("acos")
+    ctr = item.get("ctr") or 0
+    cvr = item.get("conversion_rate") or 0
+    if spend >= 5 and orders == 0:
+        recs.append({"level": "crit", "title": "花费但未出单",
+                     "detail": f"花费 {spend:.2f}、点击 {clicks:.0f}、订单 0。建议进入对话查看搜索词，优先否定零转化高花费词。"})
+    if acos is not None and acos >= 0.4:
+        recs.append({"level": "warn", "title": "ACOS 偏高",
+                     "detail": f"ACOS {acos * 100:.1f}%，销售额 {sales:.2f}。建议降竞价、收窄匹配或暂停低效词。"})
+    if impressions >= 1000 and ctr < 0.003:
+        recs.append({"level": "warn", "title": "点击率偏低",
+                     "detail": f"展示 {impressions:.0f}、CTR {ctr * 100:.2f}%。建议优化主图、标题相关性或降低宽泛曝光。"})
+    if clicks >= 20 and cvr < 0.03:
+        recs.append({"level": "warn", "title": "转化率偏低",
+                     "detail": f"点击 {clicks:.0f}、转化率 {cvr * 100:.1f}%。建议检查价格、评价、页面卖点与搜索词意图是否匹配。"})
+    if not recs:
+        recs.append({"level": "good", "title": "暂无明显广告异常",
+                     "detail": "当前活动没有命中高风险规则。建议继续观察，并在对话中结合毛利目标进一步判断预算。"})
+    return recs
+
+
+def customer_overview(user_id: str, store_id: str) -> dict[str, Any]:
+    data = _latest_imported_rows(user_id, store_id, "orders")
+    if not data:
+        return {"items": [], "counts": {"all": 0, "repeat": 0, "review": 0},
+                "error": "请先导入真实订单报表"}
+    by_buyer: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    for row in data[:300]:
+        order_id = str(row.get("order_id") or "").strip()
+        sku = str(row.get("sku") or "").strip()
+        title = str(row.get("title") or sku or "未命名商品").strip()
+        buyer = str(row.get("buyer") or "").strip()
+        buyer_key = buyer or order_id or sku or "unknown"
+        by_buyer[buyer_key] = by_buyer.get(buyer_key, 0) + 1
+        tag = "repeat" if by_buyer[buyer_key] > 1 else "review"
+        items.append({
+            "name": buyer or "买家信息未导入",
+            "prod": title,
+            "order": order_id or "订单号未导入",
+            "date": str(row.get("purchase_date") or row.get("date") or "时间未导入"),
+            "tag": tag,
+            "sku": sku,
+        })
+    counts = {
+        "all": len(items),
+        "repeat": sum(1 for x in items if x["tag"] == "repeat"),
+        "review": sum(1 for x in items if x["tag"] == "review"),
+    }
+    return {"items": items, "counts": counts, "source": "imported_orders", "row_count": len(data)}
 
 
 def ads_chat_analysis(user_id: str, store_id: str) -> str | None:

@@ -40,7 +40,7 @@ from web.import_tools import build_import_tools  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
 from web.database import connect, init_db  # noqa: E402
-from web.import_service import (ads_chat_context, ads_overview, competitor_rows, list_imports,
+from web.import_service import (ads_chat_context, ads_overview, competitor_rows, customer_overview, list_imports,
                                 parse_upload, parse_upload_preview, save_import, suggest_mapping)  # noqa: E402
 
 app = FastAPI(title="TradeFlow-AI")
@@ -564,6 +564,12 @@ def imports(x_tradeflow_user: str = Header(default="default"),
 def optimization_ads(x_tradeflow_user: str = Header(default="default"),
                      x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
     return ads_overview(x_tradeflow_user, x_tradeflow_store)
+
+
+@app.get("/api/customers")
+def customers(x_tradeflow_user: str = Header(default="default"),
+              x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+    return customer_overview(x_tradeflow_user, x_tradeflow_store)
 
 
 # ---- 合规预检：直接调 #1 合规的确定性工具，返回结构化结果（B1，无需过模型） ----

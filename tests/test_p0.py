@@ -12,7 +12,7 @@ from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
 from web.app import ChatTurn, app, _import_data_scope, _import_data_user_input
 from web import database, store
-from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, detect_report_type,
+from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, customer_overview, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
 from web.import_tools import build_import_tools
 
@@ -122,6 +122,33 @@ class TestTenantPersistence(unittest.TestCase):
         result = ads_overview("default", "default")
         self.assertEqual(result["source"], "imported_report")
         self.assertEqual(result["items"][0]["acos"], 0.25)
+        self.assertIn("recommendations", result["items"][0])
+        self.assertIn(result["items"][0]["severity"], {"crit", "warn", "good"})
+
+    def test_empty_ads_overview_does_not_return_demo_items(self):
+        result = ads_overview("default", "default")
+        self.assertEqual(result["items"], [])
+        self.assertIn("请先导入真实广告搜索词报表", result["error"])
+
+    def test_customer_overview_uses_imported_orders_only(self):
+        empty = customer_overview("default", "default")
+        self.assertEqual(empty["items"], [])
+        self.assertIn("请先导入真实订单报表", empty["error"])
+
+        mapping = {"Order ID": "order_id", "SKU": "sku", "Title": "title",
+                   "Buyer": "buyer", "Purchase Date": "purchase_date", "Quantity": "quantity"}
+        rows = [
+            {"Order ID": "111-1", "SKU": "A-1", "Title": "Silicone Mat",
+             "Buyer": "Alice", "Purchase Date": "2026-07-01", "Quantity": 1},
+            {"Order ID": "111-2", "SKU": "A-2", "Title": "Kitchen Tongs",
+             "Buyer": "Alice", "Purchase Date": "2026-07-08", "Quantity": 1},
+        ]
+        save_import("default", "default", "orders.xlsx", list(mapping), rows, mapping)
+        result = customer_overview("default", "default")
+        self.assertEqual(result["source"], "imported_orders")
+        self.assertEqual(result["counts"]["all"], 2)
+        self.assertEqual(result["counts"]["repeat"], 1)
+        self.assertEqual(result["items"][0]["name"], "Alice")
 
     def test_imported_ads_can_be_analyzed_from_chat(self):
         mapping = {"Campaign Name": "campaign", "Clicks": "clicks", "Impressions": "impressions",
