@@ -80,8 +80,24 @@ def get_spec(name: str) -> AgentSpec:
 def build(name: str, observer=None, **kwargs) -> Agent:
     """按注册信息构建一个智能体（人设+skills+它的工具集+声明的子智能体工具）。"""
     spec = get_spec(name)
-    tools = list(spec.tools) + [agent_as_tool(n) for n in spec.subagents]
+    tools = _dedupe_tools(list(spec.tools) + [agent_as_tool(n) for n in spec.subagents])
     return build_named_agent(name, tools=tools, observer=observer, **kwargs)
+
+
+def _dedupe_tools(tools: List[Tool]) -> List[Tool]:
+    """按工具名去重、保留首次出现顺序。
+
+    多个工具集会共享同一工具（如 #5 拆解复用 amazon 的 get_product_by_asin），
+    拼接后可能重名；ToolRegistry 对重名会直接报错，这里先去重避免构建失败。
+    """
+    seen: set = set()
+    unique: List[Tool] = []
+    for t in tools:
+        if t.name in seen:
+            continue
+        seen.add(t.name)
+        unique.append(t)
+    return unique
 
 
 def agent_as_tool(name: str) -> Tool:

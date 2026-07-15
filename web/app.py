@@ -222,12 +222,37 @@ def _sanitize_imported_ads_reply(reply: str) -> str:
     return out
 
 
-def _is_import_data_query(message: str, history: List[ChatTurn] | None = None) -> bool:
-    text = (message + "\n" + _history_text(history or [])).lower()
-    return any(k in text for k in (
-        "导入", "报表", "文件", "excel", "xlsx", "csv", "刚上传", "刚导",
-        "数据", "订单", "库存", "广告", "acos", "搜索词", "sku", "第二个", "继续",
-    ))
+# 明确指向"用户上传的表格/报表"的强信号：只要当前消息出现即可进导入分析支线。
+_IMPORT_STRONG_TERMS = (
+    "导入", "已导", "刚导", "刚上传", "上传", "报表", "excel", "xlsx", "csv", "字段映射",
+)
+# 分析范围词：本身太泛（"数据/广告/订单"随处可见），只有在"确有已入库文件"或
+# "对话此前已进入导入分析"时，才作为进支线的依据——否则会被业务对话里的常见词误伤。
+_IMPORT_SCOPE_TERMS = (
+    "数据", "订单", "库存", "广告", "acos", "搜索词", "sku",
+)
+# 延续/追问词：仅在导入分析已经激活时才用于"留在支线"，绝不单独触发进入。
+_IMPORT_CONTINUE_TERMS = ("第二个", "继续", "接着", "为什么", "那这个", "还有呢")
+
+
+def _is_import_data_query(message: str, history: List[ChatTurn] | None = None,
+                          has_imports: bool = False) -> bool:
+    """是否应把本轮对话交给"导入数据分析"支线。
+
+    只扫历史里的**强信号**判断支线是否已激活；泛范围词只看当前消息，避免助手上一轮
+    回复里出现"数据"之类常见词，把后续无关对话（如生成 Listing 文案）劫持进本支线。
+    """
+    current = (message or "").lower()
+    if _contains_any(current, _IMPORT_STRONG_TERMS):
+        return True
+    # 对话此前已明确进入导入分析（历史里出现过强信号）时，本轮的范围词/追问词才生效。
+    branch_active = _contains_any(_history_text(history or []).lower(), _IMPORT_STRONG_TERMS)
+    if branch_active and _contains_any(current, _IMPORT_SCOPE_TERMS + _IMPORT_CONTINUE_TERMS):
+        return True
+    # 用户确有已入库文件，且当前消息带范围词时，也进支线（有真实数据可分析）。
+    if has_imports and _contains_any(current, _IMPORT_SCOPE_TERMS):
+        return True
+    return False
 
 
 ADS_SCOPE_TERMS = (
@@ -592,7 +617,8 @@ def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
             "tools": step.tool_calls,
         })
 
-    if _is_import_data_query(body.message, body.history):
+    has_imports = bool(list_imports(x_tradeflow_user, x_tradeflow_store))
+    if _is_import_data_query(body.message, body.history, has_imports):
         result = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, observe).run(
             _import_data_user_input(body.message, body.history))
         return ChatOut(
@@ -635,7 +661,8 @@ async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="defa
 
     def run_agent() -> None:
         try:
-            is_import_query = _is_import_data_query(body.message, body.history)
+            has_imports = bool(list_imports(x_tradeflow_user, x_tradeflow_store))
+            is_import_query = _is_import_data_query(body.message, body.history, has_imports)
             if is_import_query:
                 agent = _build_import_data_agent(x_tradeflow_user, x_tradeflow_store, lambda _step: None)
                 user_input = _import_data_user_input(body.message, body.history)
