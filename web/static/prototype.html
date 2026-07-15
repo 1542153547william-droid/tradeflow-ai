@@ -174,6 +174,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .md li{margin:3px 0}
 .md li::marker{color:var(--accent)}
 .md .arrow-line{color:var(--dim);background:var(--surface-2);border-radius:8px;padding:6px 9px;font-size:13px}
+.md .plain-block{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.65}
 .md blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-weak);border-radius:0 8px 8px 0;color:var(--dim)}
 .md code{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
 .md pre{margin:0;overflow-x:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
@@ -833,6 +834,19 @@ button.imgbox{font-family:inherit}
   function isTableSep(line){const cells=tableCells(line);return cells.length>1&&cells.every(c=>/^:?-{3,}:?$/.test(c));}
   function looksLikeTableRow(line){const t=line.trim();return t.includes('|')&&(t.startsWith('|')||/\s\|\s/.test(t));}
   function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
+  function isRenderableTable(head,rows,colCount){
+    const all=[head,...rows], counts=all.map(r=>r.length);
+    if(colCount<2||colCount>10)return false;
+    if(!counts.every(c=>Math.abs(c-colCount)<=1))return false;
+    const totalSlots=all.length*colCount;
+    const cells=all.flat().map(x=>String(x||'').trim()).filter(Boolean);
+    const filledRatio=cells.length/Math.max(totalSlots,1);
+    const avgLen=cells.reduce((n,x)=>n+x.length,0)/Math.max(cells.length,1);
+    // 伪表格常见特征：列很多、每格只有一两个词/字母，渲染后会变成竖排碎片。
+    if(colCount>=6&&avgLen<8)return false;
+    if(filledRatio<0.55)return false;
+    return true;
+  }
   function normalizeAssistantText(s){
     let t=String(s==null?'':s).replace(/\r\n/g,'\n');
     // 展示层做通用清洗：还原常见 HTML 实体，并把被压成一行的 Markdown 结构恢复为块。
@@ -855,6 +869,10 @@ button.imgbox{font-family:inherit}
     const head=tableCells(lines[start]), rows=[];let i=start+(isTableSep(lines[start+1]||'')?2:1);
     while(i<lines.length&&looksLikeTableRow(lines[i])&&!isTableSep(lines[i])){rows.push(tableCells(lines[i]));i++;}
     const colCount=Math.max(head.length,...rows.map(r=>r.length));
+    if(!isRenderableTable(head,rows,colCount)){
+      const raw=lines.slice(start,i).filter(line=>!isTableSep(line)).join('\n');
+      return {html:'<div class="plain-block">'+inlineFmt(raw)+'</div>',next:i};
+    }
     const norm=a=>Array.from({length:colCount},(_,idx)=>a[idx]||'');
     const header=norm(head), bodyRows=rows.map(norm);
     const th=header.map((c,idx)=>'<th class="'+(bodyRows.every(r=>!r[idx]||isNumericCell(r[idx]))?'num':'')+'">'+inlineFmt(c)+'</th>').join('');
