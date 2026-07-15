@@ -161,8 +161,8 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .turn.a .av svg{width:15px;height:15px}
 .turn .body{min-width:0;max-width:calc(100% - 40px)}
 .turn.u .body{display:flex;justify-content:flex-end}
-.bubble{padding:11px 14px;border-radius:13px;font-size:14px;line-height:1.6}
-.turn.u .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:5px;display:inline-block}
+.bubble{padding:11px 14px;border-radius:13px;font-size:14px;line-height:1.6;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.turn.u .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:5px;display:inline-block;max-width:min(760px,100%)}
 .turn.a .bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:5px}
 .turn.a .bubble.bare{background:none;border:none;padding:0}
 .turn.a .bubble:not(.bare){max-width:100%;overflow:hidden}
@@ -177,6 +177,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .md .plain-block{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.65}
 .md blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-weak);border-radius:0 8px 8px 0;color:var(--dim)}
 .md code{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+.turn.u .md code{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22);color:#fff}
 .md pre{margin:0;overflow-x:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
 .md pre code{display:block;background:none;border:none;padding:0;white-space:pre;font-size:12px;line-height:1.55}
 .md hr{border:none;border-top:1px solid var(--border);margin:2px 0}
@@ -638,7 +639,7 @@ button.imgbox{font-family:inherit}
 
   function ensureStarted(){if(!started){started=true;const hello=$('#hello');if(hello)hello.remove();}}
   function addUser(text){ensureStarted();const t=document.createElement('div');t.className='turn u';
-    t.innerHTML='<div class="av">你</div><div class="body"><div class="bubble">'+esc(text)+'</div></div>';
+    t.innerHTML='<div class="av">你</div><div class="body"><div class="bubble"><div>'+fmt(text)+'</div></div></div>';
     inner.appendChild(t);scrollDown();}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
