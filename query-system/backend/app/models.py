@@ -146,6 +146,10 @@ class Product(BaseModel):
     content: Content = Field(default_factory=Content)
     reviews_sample: List[Review] = Field(default_factory=list)
     qa_sample: List[QA] = Field(default_factory=list)
+    # 详情抓取状态：区分“字段为空是因为被拦截/超时”还是“确实没有”。
+    #   not_fetched=未抓详情（仅列表数据）  ok=详情抓取成功
+    #   blocked=被平台拦截(验证码/机器人页)  timeout=打开详情页超时  error=其它异常
+    detail_status: Literal["not_fetched", "ok", "blocked", "timeout", "error"] = "not_fetched"
 
 
 class SearchResult(BaseModel):

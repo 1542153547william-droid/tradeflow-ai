@@ -333,6 +333,7 @@ class ScraperSource(DataSource):
             await self._throttle()
             if await self._is_blocked(page):
                 await self._debug_shot(page, f"detail_blocked_{pid}")
+                product.detail_status = "blocked"
                 return
 
             # 标题 / 价格 / 评分 / 评论数：列表页(search_top_products)才有；
@@ -375,7 +376,10 @@ class ScraperSource(DataSource):
             # 评论：/product-reviews 页需登录，改从详情页内嵌的 "Top reviews" 抓
             product.reviews_sample = await self._extract_reviews(
                 page, pid, self.settings.review_sample_size)
+            product.detail_status = "ok"
         except Exception as exc:
+            # 区分“打开详情页超时”与其它异常，便于下游/模型判断空字段的成因。
+            product.detail_status = "timeout" if "Timeout" in type(exc).__name__ or "Timeout" in str(exc) else "error"
             logger.warning("抓取详情失败 id=%s: %s", pid, exc)
         finally:
             await context.close()
