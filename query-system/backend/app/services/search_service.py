@@ -133,7 +133,9 @@ class SearchService:
         platform = platform or self.settings.default_platform
         if not registry.has_platform(platform):
             raise RuntimeError(f"不支持的平台：{platform}")
-        marketplace = marketplace or self.settings.marketplace
+        # 与 search() 一致地归一化：上游常传 "US"/"UK" 等国家码，必须映射成站点域名
+        # （amazon.com），否则爬虫会拼出 https://www.us/dp/... 这种坏 URL 而超时。
+        marketplace = _normalize_marketplace(marketplace, self.settings.marketplace)
         key = CacheStore.make_key(platform, f"asin:{product_id}", marketplace, 1)
 
         cached = self.cache.get(key)
