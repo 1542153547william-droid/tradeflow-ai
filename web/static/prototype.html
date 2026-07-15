@@ -189,6 +189,12 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .md-table td.num,.md-table th.num{text-align:right;font-variant-numeric:tabular-nums}
 .md-table tr:last-child td{border-bottom:none}
 .md-table td:first-child,.md-table th:first-child{font-weight:600;color:var(--text)}
+.md-records{display:grid;gap:10px}
+.md-record{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:10px 12px}
+.md-field{display:grid;grid-template-columns:minmax(90px,150px) 1fr;gap:10px;padding:5px 0;border-bottom:1px dashed var(--border)}
+.md-field:last-child{border-bottom:none}
+.md-field b{color:var(--dim);font-size:12px;font-weight:600}
+.md-field span{min-width:0;overflow-wrap:anywhere}
 @media(max-width:700px){
   .chatinner{max-width:100%}
   .chatscroll{padding:18px 12px}
@@ -847,6 +853,26 @@ button.imgbox{font-family:inherit}
     if(filledRatio<0.55)return false;
     return true;
   }
+  function isProseTable(head,rows){
+    const cells=[head,...rows].flat().map(x=>String(x||'').trim()).filter(Boolean);
+    if(!cells.length)return false;
+    const longCells=cells.filter(x=>x.length>70).length;
+    const avgLen=cells.reduce((n,x)=>n+x.length,0)/cells.length;
+    // 证据说明、原因分析、文案对照这类“长文本表格”用表格硬排会碎词竖排，改成卡片字段展示。
+    return longCells>=2||avgLen>36;
+  }
+  function renderRecordTable(head,rows){
+    const safeHead=head.map((h,idx)=>String(h||('列 '+(idx+1))).trim()||('列 '+(idx+1)));
+    const cards=rows.map(row=>{
+      const fields=safeHead.map((h,idx)=>{
+        const val=String(row[idx]||'').trim();
+        if(!val)return '';
+        return '<div class="md-field"><b>'+inlineFmt(h)+'</b><span>'+inlineFmt(val)+'</span></div>';
+      }).join('');
+      return fields?'<div class="md-record">'+fields+'</div>':'';
+    }).filter(Boolean).join('');
+    return '<div class="md-records">'+cards+'</div>';
+  }
   function normalizeAssistantText(s){
     let t=String(s==null?'':s).replace(/\r\n/g,'\n');
     // 展示层做通用清洗：还原常见 HTML 实体，并把被压成一行的 Markdown 结构恢复为块。
@@ -855,6 +881,8 @@ button.imgbox{font-family:inherit}
     t=t.replace(/\s+---\s+/g,'\n\n---\n\n');
     t=t.replace(/\s+(#{2,4}\s+)/g,'\n\n$1');
     t=t.replace(/\s+(✅\s*\d+[.)]\s*)/g,'\n\n$1');
+    t=t.replace(/([：:])\s+-\s+/g,'$1\n- ');
+    t=t.replace(/([。；;])\s+-\s+/g,'$1\n- ');
     t=t.replace(/(✅\s*\d+[.)]\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
     t=t.replace(/(#{2,4}\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
     t=t.replace(/\s+-\s+(?=(?:\*\*)?[A-Z0-9][A-Z0-9-]{2,}|立即|核实|优化|重新|加强|建立|需要|输入|扫描|返回|获取|检查|考虑)/g,'\n- ');
@@ -872,6 +900,9 @@ button.imgbox{font-family:inherit}
     if(!isRenderableTable(head,rows,colCount)){
       const raw=lines.slice(start,i).filter(line=>!isTableSep(line)).join('\n');
       return {html:'<div class="plain-block">'+inlineFmt(raw)+'</div>',next:i};
+    }
+    if(isProseTable(head,rows)){
+      return {html:renderRecordTable(head,rows),next:i};
     }
     const norm=a=>Array.from({length:colCount},(_,idx)=>a[idx]||'');
     const header=norm(head), bodyRows=rows.map(norm);
