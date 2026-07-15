@@ -181,9 +181,10 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .md hr{border:none;border-top:1px solid var(--border);margin:2px 0}
 .md b{font-weight:700}
 .md-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin:2px 0 4px}
-.md-table{width:100%;min-width:560px;border-collapse:separate;border-spacing:0;font-size:12.5px}
-.md-table th{background:var(--surface-2);color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;padding:9px 11px;border-bottom:1px solid var(--border);white-space:nowrap}
-.md-table td{padding:10px 11px;border-bottom:1px solid var(--border);vertical-align:top;white-space:nowrap}
+.md-table{width:max-content;min-width:var(--table-min,560px);max-width:none;border-collapse:separate;border-spacing:0;font-size:12.5px;table-layout:auto}
+.md-table th{background:var(--surface-2);color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;padding:9px 11px;border-bottom:1px solid var(--border)}
+.md-table td{padding:10px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+.md-table th,.md-table td{min-width:96px;max-width:280px;white-space:normal;overflow-wrap:break-word;word-break:normal}
 .md-table td.num,.md-table th.num{text-align:right;font-variant-numeric:tabular-nums}
 .md-table tr:last-child td{border-bottom:none}
 .md-table td:first-child,.md-table th:first-child{font-weight:600;color:var(--text)}
@@ -834,8 +835,9 @@ button.imgbox{font-family:inherit}
   function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
   function normalizeAssistantText(s){
     let t=String(s==null?'':s).replace(/\r\n/g,'\n');
-    // 有些模型会把整段说明压成一行：##、###、✅ 1.、▪、→ 全挤在一起。
-    // 这里在展示层做温和断行，历史消息重新打开时也能变清爽。
+    // 展示层做通用清洗：还原常见 HTML 实体，并把被压成一行的 Markdown 结构恢复为块。
+    // 重点是按 Markdown 结构处理，而不是按某个业务场景或某个 SKU 做 case-by-case。
+    t=t.replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&');
     t=t.replace(/\s+---\s+/g,'\n\n---\n\n');
     t=t.replace(/\s+(#{2,4}\s+)/g,'\n\n$1');
     t=t.replace(/\s+(✅\s*\d+[.)]\s*)/g,'\n\n$1');
@@ -857,7 +859,8 @@ button.imgbox{font-family:inherit}
     const header=norm(head), bodyRows=rows.map(norm);
     const th=header.map((c,idx)=>'<th class="'+(bodyRows.every(r=>!r[idx]||isNumericCell(r[idx]))?'num':'')+'">'+inlineFmt(c)+'</th>').join('');
     const body=bodyRows.map(r=>'<tr>'+r.map(c=>'<td class="'+(isNumericCell(c)?'num':'')+'">'+inlineFmt(c)+'</td>').join('')+'</tr>').join('');
-    return {html:'<div class="md-table-wrap"><table class="md-table"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table></div>',next:i};
+    const minWidth=Math.max(560,colCount*140);
+    return {html:'<div class="md-table-wrap"><table class="md-table" style="--table-min:'+minWidth+'px"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table></div>',next:i};
   }
   function renderList(items,ordered){return '<'+(ordered?'ol':'ul')+'>'+items.map(x=>'<li>'+inlineFmt(x)+'</li>').join('')+'</'+(ordered?'ol':'ul')+'>';}
   function fmt(s){
@@ -876,7 +879,9 @@ button.imgbox{font-family:inherit}
       }
       if(!trimmed){flushAll();continue;}
       if(/^---+$/.test(trimmed)){flushAll();out.push('<hr>');continue;}
-      if(looksLikeTableRow(trimmed)&&(isTableSep(lines[i+1]||'')||looksLikeTableRow(lines[i+1]||''))){flushAll();const t=renderTable(lines,i);out.push(t.html);i=t.next-1;continue;}
+      // 只有符合 GFM 表格语法：表头行 + 分隔行，才按表格渲染。
+      // 普通文本里出现多个 | 或类似多列内容时，不能误判成表格，否则会被挤成竖排乱码。
+      if(looksLikeTableRow(trimmed)&&isTableSep(lines[i+1]||'')){flushAll();const t=renderTable(lines,i);out.push(t.html);i=t.next-1;continue;}
       const h=trimmed.match(/^(#{2,4})\s+(.+)$/);
       if(h){flushAll();const tag=h[1].length===4?'h4':h[1].length===3?'h3':'h2';out.push('<'+tag+'>'+inlineFmt(h[2])+'</'+tag+'>');continue;}
       const checked=trimmed.match(/^✅\s*(\d+)[.)]\s+(.+)$/);
