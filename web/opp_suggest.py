@@ -1,7 +1,7 @@
 """对话选品的结构化输出（B0）：模型按 JSON 契约给出机会商品清单。
 
-沿用 listing_gen 的稳健模式（一次性 completion + 抠 JSON + 兜底）。当前是模型研判
-+ 类目/关键词，未接实时竞品爬虫（那是更重的异步任务，后续增强）；每条附
+沿用 listing_gen 的稳健模式（一次性 completion + 抠 JSON）。机会建议必须基于
+真实查询结果或店铺导入数据；查询系统返回 mock 示例源时不再冒充真实机会。每条附
 flag_category_risk 的确定性类目风险，供前端渲染可「放入机会上新」的卡片。
 """
 
@@ -54,6 +54,15 @@ def suggest_opportunities(query: str, top_n: int = 4,
         products = market.get("products") or []
         source = market.get("source", "amazon")
         live_error = None
+    if source == "mock":
+        if imported_products:
+            products = imported_products
+            source = "imported_competitor_report"
+            live_error = "商品查询系统仅返回示例数据，已改用店铺导入数据"
+        else:
+            return {"query": query, "items": [], "model_ok": False,
+                    "data_source": "mock_rejected",
+                    "error": "商品查询系统当前只有示例数据，未生成机会建议。请先导入竞品/商品数据，或配置真实 API/爬虫数据源。"}
     if not products:
         return {"query": query, "items": [], "model_ok": False,
                 "data_source": "unavailable",
