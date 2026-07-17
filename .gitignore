@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv-codex/
 venv/
 .env
 .pytest_cache/
@@ -17,3 +18,8 @@ cache.db
 Thumbs.db
 frontend/node_modules/
 debug_shots/
+
+# 真实店铺数据（含订单/买家信息，G5：不入公开仓库；仓库只放脱敏样例）
+data/ads/*_真实.*
+data/ads/输出/
+data/monitor/快照/

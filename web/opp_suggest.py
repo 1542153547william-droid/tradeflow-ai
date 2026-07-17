@@ -1,7 +1,7 @@
 """对话选品的结构化输出（B0）：模型按 JSON 契约给出机会商品清单。
 
-沿用 listing_gen 的稳健模式（一次性 completion + 抠 JSON + 兜底）。当前是模型研判
-+ 类目/关键词，未接实时竞品爬虫（那是更重的异步任务，后续增强）；每条附
+沿用 listing_gen 的稳健模式（一次性 completion + 抠 JSON）。机会建议必须基于
+真实查询结果或店铺导入数据；查询系统返回 mock 示例源时不再冒充真实机会。每条附
 flag_category_risk 的确定性类目风险，供前端渲染可「放入机会上新」的卡片。
 """
 
@@ -14,6 +14,8 @@ from typing import Any, Dict, List
 from tradeflow.factory import build_provider
 from tradeflow.llm.base import Message, Role
 from tradeflow.tools.compliance import flag_category_risk
+from tradeflow.tools.amazon import search_products
+from web.contracts import OpportunityListContract
 
 _SYS = (
     "你是资深亚马逊选品专家。根据用户给的类目 / 关键词 / 需求，给出值得做的机会商品清单。"
@@ -41,8 +43,34 @@ def _extract_json_array(text: str) -> List[Any]:
         return []
 
 
-def suggest_opportunities(query: str, top_n: int = 4) -> Dict[str, Any]:
-    prompt = f"用户需求：{query}\n请给出 {top_n} 个机会商品。"
+def suggest_opportunities(query: str, top_n: int = 4,
+                          imported_products: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    market = search_products.func(query, "amazon", min(max(top_n * 2, 3), 20), "amazon.com", False)
+    if market.get("error"):
+        products = imported_products or []
+        source = "imported_competitor_report"
+        live_error = market["error"]
+    else:
+        products = market.get("products") or []
+        source = market.get("source", "amazon")
+        live_error = None
+    if source == "mock":
+        if imported_products:
+            products = imported_products
+            source = "imported_competitor_report"
+            live_error = "商品查询系统仅返回示例数据，已改用店铺导入数据"
+        else:
+            return {"query": query, "items": [], "model_ok": False,
+                    "data_source": "mock_rejected",
+                    "error": "商品查询系统当前只有示例数据，未生成机会建议。请先导入竞品/商品数据，或配置真实 API/爬虫数据源。"}
+    if not products:
+        return {"query": query, "items": [], "model_ok": False,
+                "data_source": "unavailable",
+                "error": "实时 Amazon 查询被拦截，且该店铺尚未导入竞品 Excel，无法生成可信建议"}
+    evidence = json.dumps(products, ensure_ascii=False, default=str)[:14000]
+    prompt = (f"用户需求：{query}\n请基于以下真实 Amazon 查询结果给出 {top_n} 个机会商品。"
+              "不得生成查询结果之外的市场数字；margin 无成本数据时写‘数据不足’。"
+              f"\n真实竞品数据：{evidence}")
     text = ""
     try:
         text = build_provider().complete(
@@ -51,6 +79,12 @@ def suggest_opportunities(query: str, top_n: int = 4) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001 —— 模型失败也别把接口打崩
         text = ""
     arr = _extract_json_array(text)
+    try:
+        validated = OpportunityListContract.model_validate({"items": arr})
+        arr = [x.model_dump() for x in validated.items]
+    except Exception:
+        validated = None
+        arr = []
 
     items: List[Dict[str, Any]] = []
     for o in arr[:top_n]:
@@ -70,4 +104,6 @@ def suggest_opportunities(query: str, top_n: int = 4) -> Dict[str, Any]:
             "reason": str(o.get("reason") or "").strip(),
             "risk_level": risk.get("risk_level"),
         })
-    return {"query": query, "items": items, "model_ok": bool(arr)}
+    return {"query": query, "items": items, "model_ok": bool(validated),
+            "data_source": source, "live_query_error": live_error,
+            "evidence_count": len(products), "fetched_at": market.get("fetched_at")}

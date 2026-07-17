@@ -1,0 +1,6 @@
+﻿date/time,settlement id,type,order id,sku,description,quantity,marketplace,product sales,selling fees,fba fees,promotional rebates,total
+"Jun 1, 2026 1:00:00 AM PDT",111,Order,111-000-001,SAMPLE-TORCH-4P,Sample Solar Torch 4 Pack,1,amazon.com,31.99,-4.8,-7.2,0,19.99
+"Jun 2, 2026 1:00:00 AM PDT",111,Order,111-000-002,SAMPLE-TORCH-4P,Sample Solar Torch 4 Pack,2,amazon.com,63.98,-9.6,-14.4,-2.0,37.98
+"Jun 3, 2026 1:00:00 AM PDT",111,Order,111-000-003,SAMPLE-STRING-2P,Sample String Lights 2 Pack,1,amazon.com,21.99,-3.3,-6.8,0,11.89
+"Jun 4, 2026 1:00:00 AM PDT",111,Refund,111-000-001,SAMPLE-TORCH-4P,Sample Solar Torch 4 Pack,1,amazon.com,-31.99,4.8,0,0,-27.19
+"Jun 5, 2026 1:00:00 AM PDT",111,Adjustment,,SAMPLE-TORCH-4P,FBA Inventory Reimbursement,1,,0,0,0,0,12.08

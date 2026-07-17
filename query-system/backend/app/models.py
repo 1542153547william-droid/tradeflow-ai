@@ -146,6 +146,10 @@ class Product(BaseModel):
     content: Content = Field(default_factory=Content)
     reviews_sample: List[Review] = Field(default_factory=list)
     qa_sample: List[QA] = Field(default_factory=list)
+    # 详情抓取状态：区分“字段为空是因为被拦截/超时”还是“确实没有”。
+    #   not_fetched=未抓详情（仅列表数据）  ok=详情抓取成功
+    #   blocked=被平台拦截(验证码/机器人页)  timeout=打开详情页超时  error=其它异常
+    detail_status: Literal["not_fetched", "ok", "blocked", "timeout", "error"] = "not_fetched"
 
 
 class SearchResult(BaseModel):
@@ -166,6 +170,8 @@ class SearchRequest(BaseModel):
     platform: str = "amazon"              # 目标平台（amazon / ebay / walmart …）
     marketplace: Optional[str] = None
     top_n: Optional[int] = Field(default=None, ge=1, le=20)
-    include_reviews: bool = True
-    include_detail: bool = True
+    # Low-frequency MVP defaults: one search page only. Detail/review enrichment
+    # must be explicitly requested because each item otherwise opens more pages.
+    include_reviews: bool = False
+    include_detail: bool = False
     force_refresh: bool = False

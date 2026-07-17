@@ -80,6 +80,74 @@ class OpenAICompatProvider(LLMProvider):
         resp = self._client.chat.completions.create(**kwargs)
         return self._from_wire(resp)
 
+    def stream(
+        self,
+        messages: List[Message],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        system: Optional[str] = None,
+    ):
+        """流式生成：逐块 yield ('delta', 文本)；结束时 yield ('done', LLMResponse)。
+
+        只把最终答案的文本按 token 流出；工具调用轮的 tool_calls 分片会被拼齐，
+        随最后的 LLMResponse 一并给出（agent 循环据此决定是否继续调工具）。
+        """
+        self._ensure_client()
+        wire: List[Dict[str, Any]] = []
+        if system:
+            wire.append({"role": "system", "content": system})
+        for m in messages:
+            wire.extend(self._to_wire(m))
+
+        kwargs: Dict[str, Any] = {
+            "model": self.config.model,
+            "messages": wire,
+            "max_tokens": self.config.max_tokens,
+            "temperature": self.config.temperature,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = [self._tool_to_wire(t) for t in tools]
+        kwargs.update(self.config.extra.get("api_kwargs", {}))
+
+        text_parts: List[str] = []
+        frags: Dict[int, Dict[str, str]] = {}   # index -> {id,name,args}
+        finish: Optional[str] = None
+        for chunk in self._client.chat.completions.create(**kwargs):
+            if not chunk.choices:
+                continue
+            ch = chunk.choices[0]
+            delta = ch.delta
+            piece = getattr(delta, "content", None)
+            if piece:
+                text_parts.append(piece)
+                yield ("delta", piece)
+            for tcd in (getattr(delta, "tool_calls", None) or []):
+                slot = frags.setdefault(tcd.index, {"id": "", "name": "", "args": ""})
+                if tcd.id:
+                    slot["id"] = tcd.id
+                fn = getattr(tcd, "function", None)
+                if fn is not None:
+                    if getattr(fn, "name", None):
+                        slot["name"] = fn.name
+                    if getattr(fn, "arguments", None):
+                        slot["args"] += fn.arguments
+            if ch.finish_reason:
+                finish = ch.finish_reason
+
+        tool_calls: List[ToolCall] = []
+        for idx in sorted(frags):
+            f = frags[idx]
+            try:
+                args = json.loads(f["args"] or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(ToolCall(id=f["id"], name=f["name"], arguments=args))
+        stop = StopReason.TOOL_USE if tool_calls else StopReason.END
+        if finish == "length":
+            stop = StopReason.MAX_TOKENS
+        yield ("done", LLMResponse(text="".join(text_parts),
+                                   tool_calls=tool_calls, stop_reason=stop))
+
     # --- translation helpers ------------------------------------------------
     def _to_wire(self, m: Message) -> List[Dict[str, Any]]:
         if m.role == Role.TOOL:

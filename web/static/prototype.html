@@ -102,6 +102,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .agent-sel{width:auto;max-width:190px;background:var(--surface-2);border:1px solid var(--border);
   border-radius:9px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit}
 .agent-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak);outline:none}
+.agent-sel.is-hidden{display:none}
 
 /* ---------- shell ---------- */
 .shell{flex:1;display:flex;min-height:0}
@@ -117,14 +118,26 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .nav-item:hover{background:var(--surface-2);color:var(--text)}
 .nav-item.active{background:var(--accent-weak);color:var(--accent-strong)}
 .nav-item.active .badge{background:var(--accent);color:#fff}
+.agent-nav{display:flex;flex-direction:column;gap:2px;margin-bottom:3px}
+.agent-nav-item{display:flex;align-items:flex-start;gap:9px;width:100%;border:none;background:none;text-align:left;
+  color:var(--dim);border-radius:9px;padding:8px 10px;font-family:inherit}
+.agent-nav-item:hover{background:var(--surface-2);color:var(--text)}
+.agent-nav-item.active{background:var(--accent-weak);color:var(--accent-strong)}
+.agent-nav-item .ico{width:19px;height:19px;border-radius:7px;display:grid;place-items:center;flex:0 0 19px;
+  background:var(--surface-2);color:var(--accent-strong);font-size:11px;font-weight:700;margin-top:1px}
+.agent-nav-item.active .ico{background:var(--accent);color:#fff}
+.agent-nav-item b{display:block;font-size:12.5px;line-height:1.25}
+.agent-nav-item span.desc{display:block;font-size:11px;line-height:1.35;color:var(--faint);margin-top:2px}
+.agent-nav-item.active span.desc{color:var(--dim)}
 .new-chat{margin:2px 0 8px;border:1px solid var(--border-strong);border-radius:9px;padding:9px 11px;
   display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--text);background:var(--surface)}
 .new-chat:hover{background:var(--surface-2)}
 .new-chat svg{width:16px;height:16px}
 .history{margin-top:6px}
-.hist-item{display:block;width:100%;text-align:left;border:none;background:none;color:var(--dim);
+.hist-item{display:block;width:100%;text-align:left;border:none;background:none;color:var(--dim);cursor:pointer;
   font-size:12.5px;padding:7px 11px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hist-item:hover{background:var(--surface-2);color:var(--text)}
+.hist-item.active{background:var(--good-weak);color:var(--text);font-weight:600}
 .side-foot{margin-top:auto;padding:10px;border-top:1px solid var(--border);color:var(--faint);font-size:11.5px}
 
 .main{flex:1;overflow-y:auto;min-width:0;display:flex;flex-direction:column}
@@ -140,7 +153,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 /* ---------- CHAT (home) ---------- */
 .chatview{flex:1;display:flex;flex-direction:column;min-height:0}
 .chatscroll{flex:1;overflow-y:auto;padding:26px 20px 20px}
-.chatinner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.chatinner{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 .hello{text-align:center;padding:36px 0 14px}
 .hello .mk{width:52px;height:52px;border-radius:14px;background:var(--accent);display:grid;place-items:center;margin:0 auto 16px}
 .hello .mk svg{width:26px;height:26px;color:#fff}
@@ -160,10 +173,46 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .turn.a .av svg{width:15px;height:15px}
 .turn .body{min-width:0;max-width:calc(100% - 40px)}
 .turn.u .body{display:flex;justify-content:flex-end}
-.bubble{padding:11px 14px;border-radius:13px;font-size:14px;line-height:1.6}
-.turn.u .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:5px;display:inline-block}
+.bubble{padding:11px 14px;border-radius:13px;font-size:14px;line-height:1.6;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.turn.u .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:5px;display:inline-block;max-width:min(760px,100%)}
 .turn.a .bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:5px}
 .turn.a .bubble.bare{background:none;border:none;padding:0}
+.turn.a .bubble:not(.bare){max-width:100%;overflow:hidden}
+.md{display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}
+.md p{margin:0}
+.md h2,.md h3{font-size:15px;font-weight:700;margin:6px 0 0;display:flex;align-items:center;gap:7px}
+.md h4{font-size:13px;font-weight:700;color:var(--dim);margin:2px 0 0}
+.md ul,.md ol{margin:0;padding-left:20px}
+.md li{margin:3px 0}
+.md li::marker{color:var(--accent)}
+.md .arrow-line{color:var(--dim);background:var(--surface-2);border-radius:8px;padding:6px 9px;font-size:13px}
+.md .plain-block{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;line-height:1.65}
+.md blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-weak);border-radius:0 8px 8px 0;color:var(--dim)}
+.md code{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+.turn.u .md code{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22);color:#fff}
+.md pre{margin:0;overflow-x:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
+.md pre code{display:block;background:none;border:none;padding:0;white-space:pre;font-size:12px;line-height:1.55}
+.md hr{border:none;border-top:1px solid var(--border);margin:2px 0}
+.md b{font-weight:700}
+.md-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin:2px 0 4px}
+.md-table{width:max-content;min-width:var(--table-min,560px);max-width:none;border-collapse:separate;border-spacing:0;font-size:12.5px;table-layout:auto}
+.md-table th{background:var(--surface-2);color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;padding:9px 11px;border-bottom:1px solid var(--border)}
+.md-table td{padding:10px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+.md-table th,.md-table td{min-width:96px;max-width:280px;white-space:normal;overflow-wrap:break-word;word-break:normal}
+.md-table td.num,.md-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.md-table tr:last-child td{border-bottom:none}
+.md-table td:first-child,.md-table th:first-child{font-weight:600;color:var(--text)}
+.md-records{display:grid;gap:10px}
+.md-record{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:10px 12px}
+.md-field{display:grid;grid-template-columns:minmax(90px,150px) 1fr;gap:10px;padding:5px 0;border-bottom:1px dashed var(--border)}
+.md-field:last-child{border-bottom:none}
+.md-field b{color:var(--dim);font-size:12px;font-weight:600}
+.md-field span{min-width:0;overflow-wrap:anywhere}
+@media(max-width:700px){
+  .chatinner{max-width:100%}
+  .chatscroll{padding:18px 12px}
+  .md-table{min-width:520px}
+}
 .step{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .step .sp{width:13px;height:13px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -330,13 +379,13 @@ button.imgbox{font-family:inherit}
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></span>TradeFlow&nbsp;AI</div>
-    <select id="agentSel" class="agent-sel" title="选择智能体（自动路由=按你的话智能判断）"><option value="auto">自动路由</option></select>
+    <select id="agentSel" class="agent-sel is-hidden" title="当前产品功能"><option value="auto">自动路由</option></select>
     <div class="spacer"></div>
     <div class="store-switch">
       <button class="store-btn" id="storeBtn"><span class="dot"></span><b id="storeName">Aurora Home US</b><span class="mk" id="storeMk">· 美国</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="store-menu" id="storeMenu"></div>
     </div>
-    <button class="btn primary" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>授权亚马逊店铺</button>
+    <button class="btn primary" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>新建店铺空间</button>
     <button class="icon-btn" id="themeBtn" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
   </div>
 
@@ -345,16 +394,13 @@ button.imgbox{font-family:inherit}
     <nav class="side">
       <button class="new-chat" id="newChat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>新对话</button>
       <button class="nav-item active" data-view="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>对话</button>
-      <button class="nav-item" data-view="listing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5L3 21l4.5-1.5"/><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/><circle cx="15" cy="9" r="1.3"/></svg>机会上新 <span class="badge" id="oppBadge">6</span></button>
       <button class="nav-item" data-view="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>数据导入</button>
-      <button class="nav-item" data-view="optimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.5.5 1 1.3 1 2.5h6c0-1.2.5-2 1-2.5A6 6 0 0 0 12 3z"/></svg>优化建议 <span class="badge">18</span></button>
+      <button class="nav-item" data-view="optimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.5.5 1 1.3 1 2.5h6c0-1.2.5-2 1-2.5A6 6 0 0 0 12 3z"/></svg>优化建议</button>
       <button class="nav-item" data-view="email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>客户跟踪</button>
+      <div class="nav-label">产品功能</div>
+      <div class="agent-nav" id="agentNav"></div>
       <div class="nav-label">最近对话</div>
-      <div class="history">
-        <button class="hist-item">厨房类目机会商品挖掘</button>
-        <button class="hist-item">加湿器 Listing 素材生成</button>
-        <button class="hist-item">宠物用品选品咨询</button>
-      </div>
+      <div class="history" id="chatHistoryList"></div>
       <div class="side-foot">引擎：<b>连接中…</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端</div>
     </nav>
 
@@ -390,7 +436,8 @@ button.imgbox{font-family:inherit}
       <!-- ===== LISTING / 机会上新 ===== -->
       <section class="view pad" data-v="listing">
         <div id="oppList">
-          <div class="page-head"><div class="txt"><h2>机会上新</h2><p>对话里确认的机会商品会进到这里。可继续编辑主图/文案，做合规预检并一键上架。</p></div></div>
+          <div class="page-head"><div class="txt"><h2>机会上新</h2><p>用 TradeFlow AI 发现值得做的机会商品，确认后进入这里继续生成 Listing、做合规预检并准备上架。</p></div>
+            <button class="btn primary" id="discoverOppBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/><path d="M5 19l4-1"/></svg>发现上新机会</button></div>
           <div class="grid opps" id="oppGrid"></div>
         </div>
         <div id="oppEditor" style="display:none">
@@ -435,11 +482,12 @@ button.imgbox{font-family:inherit}
 
       <!-- ===== IMPORT ===== -->
       <section class="view pad" data-v="import">
-        <div class="page-head"><div class="txt"><h2>数据导入</h2><p>从亚马逊后台同步，或上传 Excel 报表。数据入库后驱动机会挖掘与优化建议。</p></div></div>
-        <div class="tabs" id="importTabs"><button class="tab active" data-t="amazon">亚马逊后台</button><button class="tab" data-t="excel">Excel 导入</button></div>
+        <div class="page-head"><div class="txt"><h2>数据导入</h2><p>当前 MVP 通过 Excel / CSV 上传真实报表驱动分析；SP-API 自动同步未配置时不会模拟成功。</p></div></div>
+        <div class="tabs" id="importTabs"><button class="tab active" data-t="amazon">SP-API 同步</button><button class="tab" data-t="excel">Excel 导入</button></div>
         <div id="tab-amazon">
           <div class="card">
-            <h3 style="font-size:15px;margin-bottom:14px">从 <b id="impStore">Aurora Home US</b> 同步</h3>
+            <h3 style="font-size:15px;margin-bottom:14px">从 <b id="impStore">Aurora Home US</b> 自动同步</h3>
+            <div class="note" style="margin-bottom:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>当前未配置 Amazon SP-API 授权。这里不会显示假进度或假数据，请使用 Excel 导入真实报表。</div>
             <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
               <label class="check"><input type="checkbox" checked><span class="g">商品 Listing<small>标题 / 五点 / 图片 / 价格</small></span></label>
               <label class="check"><input type="checkbox" checked><span class="g">订单数据<small>买家、SKU、金额、日期</small></span></label>
@@ -466,18 +514,13 @@ button.imgbox{font-family:inherit}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:26px;height:26px;margin-bottom:8px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
               <div style="font-size:13.5px;color:var(--text);font-weight:500">点击选择文件，或拖拽到此处</div>
               <div style="font-size:12px;margin-top:4px">.xlsx / .csv · 单文件 ≤ 20MB</div>
-              <input type="file" id="fileInp" hidden>
+              <input type="file" id="fileInp" accept=".xlsx,.xlsm,.csv" hidden>
             </label>
+            <div id="uploadStatus" role="status" aria-live="polite" style="display:none;margin-top:10px;font-size:13px;color:var(--dim)"></div>
             <div id="mapping" style="display:none;margin-top:16px">
-              <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span class="pill good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:11px;height:11px"><path d="M20 6L9 17l-5-5"/></svg>已解析</span><b id="fileName">ads_report_90d.xlsx</b><span style="color:var(--dim)">· 1,204 行 · 12 列</span></div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span class="pill good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:11px;height:11px"><path d="M20 6L9 17l-5-5"/></svg>已解析</span><b id="fileName"></b><span id="fileMeta" style="color:var(--dim)"></span></div>
               <p style="font-size:12.5px;color:var(--dim);margin:0 0 10px">确认列与字段的对应关系：</p>
-              <div class="tbl-wrap"><table>
-                <tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>
-                <tr><td class="mono">Advertised ASIN</td><td class="mono">B0C1X2Y3Z4</td><td><select><option selected>ASIN</option><option>SKU</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Customer Search Term</td><td>cool mist humidifier</td><td><select><option selected>搜索词</option><option>关键词</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Impressions</td><td class="mono">18,204</td><td><select><option selected>曝光量</option><option>点击量</option><option>忽略</option></select></td></tr>
-                <tr><td class="mono">Spend</td><td class="mono">$342.10</td><td><select><option selected>花费</option><option>销售额</option><option>忽略</option></select></td></tr>
-              </table></div>
+              <div class="tbl-wrap"><table id="mappingTbl"><tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr></table></div>
               <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:14px"><button class="btn" id="cancelMap">取消</button><button class="btn primary" id="confirmMap">确认导入</button></div>
             </div>
           </div>
@@ -485,20 +528,18 @@ button.imgbox{font-family:inherit}
         <h3 style="font-size:14px;margin:24px 0 12px">导入历史</h3>
         <div class="card" style="padding:6px 10px"><div class="tbl-wrap"><table id="histTbl">
           <tr><th>来源</th><th>数据类型</th><th>行数</th><th>时间</th><th>状态</th></tr>
-          <tr><td><span class="pill accent"><span class="d"></span>后台</span></td><td>Listing + 订单</td><td class="mono">312</td><td class="tnum">今天 09:14</td><td><span class="pill good">完成</span></td></tr>
-          <tr><td><span class="pill amber"><span class="d"></span>Excel</span></td><td>90天广告报表</td><td class="mono">1,204</td><td class="tnum">昨天 21:03</td><td><span class="pill good">完成</span></td></tr>
         </table></div></div>
       </section>
 
       <!-- ===== OPTIMIZE ===== -->
       <section class="view pad" data-v="optimize">
-        <div class="page-head"><div class="txt"><h2>优化建议</h2><p>Agent 基于导入数据给出结论。左侧选商品，右侧查看结论并直接修改后提交回亚马逊。</p></div></div>
+        <div class="page-head"><div class="txt"><h2>优化建议</h2><p>TradeFlow AI 基于已导入的真实广告报表给出诊断。没导入数据时不会显示示例建议。</p></div></div>
         <div class="work"><div class="plist" id="plist"></div><div id="detail"></div></div>
       </section>
 
       <!-- ===== EMAIL ===== -->
       <section class="view pad" data-v="email">
-        <div class="page-head"><div class="txt"><h2>客户跟踪</h2><p>对购买过的买家发送跟踪邮件。选择客户与模板，预览后一键发送。</p></div></div>
+        <div class="page-head"><div class="txt"><h2>客户跟踪</h2><p>基于已导入的真实订单表查看待跟进买家。未配置 Buyer-Seller Messaging 前只预览，不模拟发送。</p></div></div>
         <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>亚马逊仅允许通过 Buyer-Seller Messaging 联系买家，禁止营销外链与索取好评式话术，模板已按合规口径设计。</div>
         <div class="mail-grid">
           <div>
@@ -534,21 +575,25 @@ button.imgbox{font-family:inherit}
   function toast(msg){const t=document.createElement('div');t.className='toast';
     t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'+msg;
     $('#toasts').appendChild(t);setTimeout(()=>t.remove(),2600);}
-  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 
   /* ---------- stores ---------- */
   const MK={US:'美国',UK:'英国',DE:'德国',JP:'日本'};
-  let stores=[{id:1,name:'Aurora Home US',mk:'US',status:'good',sync:'2 小时前'},{id:2,name:'Aurora Home DE',mk:'DE',status:'warn',sync:'3 天前'}];
-  let curStore=1;
+  let stores=[{id:'default',name:'默认店铺',mk:'US',status:'good',sync:'未同步'}];
+  let curStore='default';
+  const nativeFetch=window.fetch.bind(window);
+  window.fetch=(input,init={})=>{const url=typeof input==='string'?input:input.url;
+    if(url&&url.startsWith('/api/')){const headers=new Headers(init.headers||{});headers.set('X-TradeFlow-Store',curStore||'default');init={...init,headers};}
+    return nativeFetch(input,init);};
   const sColor={good:'var(--good)',warn:'var(--warn)',crit:'var(--crit)'},sText={good:'授权有效',warn:'即将过期',crit:'需重新授权'};
   function renderStores(){
     const m=$('#storeMenu');m.innerHTML='';
     stores.forEach(s=>{const el=document.createElement('div');el.className='store-item';
       el.innerHTML=`<span class="dot" style="background:${sColor[s.status]}"></span><span class="meta"><b>${s.name}</b><span>${MK[s.mk]} · ${sText[s.status]} · 同步 ${s.sync}</span></span>${s.id===curStore?'<svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>':''}`;
-      el.onclick=()=>{curStore=s.id;syncStore();m.classList.remove('open');};m.appendChild(el);});
+      el.onclick=()=>{if(curStore!==s.id){curStore=s.id;resetChatCanvas(false);}syncStore();loadChatSessions(true);loadOpps();loadOptimize();loadCustomers();m.classList.remove('open');};m.appendChild(el);});
     const sep=document.createElement('div');sep.className='sep';m.appendChild(sep);
     const add=document.createElement('div');add.className='store-item';add.style.color='var(--accent-strong)';
-    add.innerHTML='<span style="width:7px"></span><span class="meta"><b>＋ 授权新店铺</b></span>';add.onclick=()=>{m.classList.remove('open');openAuth();};m.appendChild(add);
+    add.innerHTML='<span style="width:7px"></span><span class="meta"><b>＋ 新建店铺空间</b></span>';add.onclick=()=>{m.classList.remove('open');openAuth();};m.appendChild(add);
   }
   function syncStore(){const s=stores.find(x=>x.id===curStore);$('#storeName').textContent=s.name;$('#storeMk').textContent='· '+MK[s.mk];$('#impStore').textContent=s.name;renderStores();}
   $('#storeBtn').onclick=e=>{e.stopPropagation();$('#storeMenu').classList.toggle('open');};
@@ -559,6 +604,44 @@ button.imgbox{font-family:inherit}
   function go(v){$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
     $$('.view').forEach(x=>x.classList.toggle('active',x.dataset.v===v));$('.main').scrollTop=0;}
   $$('.nav-item').forEach(b=>b.onclick=()=>go(b.dataset.view));
+  function setCurrentAgent(key){
+    const sel=$('#agentSel');if(sel)sel.value=key||'auto';
+    $$('#agentNav .agent-nav-item').forEach(btn=>btn.classList.toggle('active',btn.dataset.agent===(key||'auto')));
+  }
+  function startOpportunityDiscovery(){
+    setCurrentAgent('selection');
+    go('chat');
+    const prompt='帮我基于当前店铺和已导入数据，发现可以上新的机会商品，并给出推荐理由';
+    const input=$('#chatInp');
+    if(input){input.value=prompt;autosize();}
+    submitInput(prompt);
+    toast('已切换到：机会上新');
+  }
+  function renderAgentNav(list){
+    const box=$('#agentNav');if(!box)return;
+    const byKey={};list.forEach(a=>{byKey[a.key]=a;});
+    const items=[
+      {key:'auto',label:'智能分析',desc:'TradeFlow AI 自动判断该用哪项能力'},
+      {key:'launch',agent:'selection',label:'机会上新',desc:'发现机会商品，进入上新池并生成 Listing'},
+      ...(list.filter(a=>a.key!=='default'&&a.key!=='selection').map(a=>({
+        key:a.key,agent:a.key,label:String(a.label||a.key).replace(/^#\d+\s*/,''),desc:a.desc||''
+      })))
+    ];
+    box.innerHTML='';
+    items.forEach((a,idx)=>{
+      const btn=document.createElement('button');
+      btn.type='button';btn.className='agent-nav-item';btn.dataset.agent=a.agent||a.key;btn.title=a.desc||a.label;
+      const cleanLabel=String(a.label||a.key).replace(/^#\d+\s*/,'');
+      const ico=a.key==='auto'?'↗':(a.key==='launch'?'上':String(idx||'•'));
+      btn.innerHTML='<span class="ico">'+esc(ico)+'</span><span><b>'+esc(cleanLabel)+'</b><span class="desc">'+esc(a.desc||'')+'</span></span>';
+      btn.onclick=()=>{
+        if(a.key==='launch'){setCurrentAgent('selection');go('listing');toast('已进入：机会上新');return;}
+        setCurrentAgent(a.agent||a.key);go('chat');toast('已切换到：'+cleanLabel);
+      };
+      box.appendChild(btn);
+    });
+    setCurrentAgent(($('#agentSel')&&$('#agentSel').value)||'auto');
+  }
 
   /* ---------- modal ---------- */
   const ov=$('#overlay');
@@ -566,14 +649,14 @@ button.imgbox{font-family:inherit}
   function closeModal(){ov.classList.remove('open');ov.innerHTML='';}
   ov.onclick=e=>{if(e.target===ov)closeModal();};
   function openAuth(){
-    modal(`<div class="mh"><h3>授权亚马逊店铺</h3><button class="x" data-close>×</button></div><div class="mb">
+    modal(`<div class="mh"><h3>新建店铺数据空间</h3><button class="x" data-close>×</button></div><div class="mb">
       <label class="fld"><span class="cap">选择站点 Marketplace</span><select id="mkSel"><option value="US">北美 · 美国 (US)</option><option value="UK">欧洲 · 英国 (UK)</option><option value="DE">欧洲 · 德国 (DE)</option><option value="JP">日本 (JP)</option></select></label>
       <label class="fld" style="margin:0"><span class="cap">店铺备注名</span><input type="text" id="stName" placeholder="例如 Aurora Home US"></label>
-      <p style="font-size:12px;color:var(--dim);margin-top:14px;line-height:1.6">点击后跳转亚马逊 SP-API 授权页（LWA / Selling Partner OAuth），授权后自动回调绑定，Token 存于后端。</p></div>
-      <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="goAuth">前往亚马逊授权</button></div>`);
-    $('#goAuth').onclick=()=>{const mk=$('#mkSel').value,nm=$('#stName').value||('New Store '+mk);
-      $('#goAuth').textContent='跳转授权中…';$('#goAuth').disabled=true;
-      setTimeout(()=>{const id=Date.now();stores.push({id,name:nm,mk,status:'good',sync:'刚刚'});curStore=id;syncStore();closeModal();toast('店铺「'+nm+'」授权成功');},1500);};
+      <p style="font-size:12px;color:var(--dim);margin-top:14px;line-height:1.6">用于隔离该店铺上传的报表、机会商品和分析结果。Amazon OAuth 自动同步将在取得 SP-API 资质后启用。</p></div>
+      <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="goAuth">创建</button></div>`);
+    $('#goAuth').onclick=async()=>{const mk=$('#mkSel').value,nm=$('#stName').value||('New Store '+mk);
+      $('#goAuth').textContent='创建中…';$('#goAuth').disabled=true;
+      try{const r=await fetch('/api/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,marketplace:mk})});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();stores.push({id:d.id,name:d.name,mk:d.marketplace,status:'good',sync:'未同步'});curStore=d.id;syncStore();closeModal();toast('店铺空间已创建');}catch(e){toast('创建失败：'+String(e.message||e));$('#goAuth').disabled=false;$('#goAuth').textContent='创建';}};
   }
   $('#authBtn').onclick=openAuth;
 
@@ -603,16 +686,112 @@ button.imgbox{font-family:inherit}
     desc:'High-quality '+nm+' designed to solve real customer pain points, with keyword-rich copy ready for Amazon.',
     kw:[String(nm).toLowerCase(),'best seller alternative','gift idea','durable '+ct]};}
 
-  let selected=null, started=false;
+  let selected=null, started=false, chatHistory=[], currentChatId=null;
+  const HELLO_HTML=$('#hello').outerHTML;
   const AV_A='<div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></div>';
 
-  function ensureStarted(){if(!started){started=true;$('#hello').remove();}}
+  function ensureStarted(){if(!started){started=true;const hello=$('#hello');if(hello)hello.remove();}}
   function addUser(text){ensureStarted();const t=document.createElement('div');t.className='turn u';
-    t.innerHTML='<div class="av">你</div><div class="body"><div class="bubble">'+esc(text)+'</div></div>';
+    t.innerHTML='<div class="av">你</div><div class="body"><div class="bubble"><div>'+fmt(text)+'</div></div></div>';
     inner.appendChild(t);scrollDown();}
   function addAgent(innerHTML){const t=document.createElement('div');t.className='turn a';
     t.innerHTML=AV_A+'<div class="body">'+innerHTML+'</div>';inner.appendChild(t);scrollDown();return t;}
   function scrollDown(){requestAnimationFrame(()=>scroll.scrollTop=scroll.scrollHeight);}
+  function setActiveHistoryItem(id){
+    $$('#chatHistoryList .hist-item').forEach(btn=>btn.classList.toggle('active',btn.dataset.chatId===id));
+  }
+  function renderChatSessionItems(box,items){
+    box.innerHTML='';
+    if(!items.length){
+      box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+      return;
+    }
+    items.forEach(s=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='hist-item'+(s.id===currentChatId?' active':'');
+      btn.dataset.chatId=s.id;
+      btn.title=s.title||'新对话';
+      btn.textContent=s.title||'新对话';
+      btn.addEventListener('click',e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        loadChatSession(s.id);
+      });
+      box.appendChild(btn);
+    });
+  }
+  async function loadChatSessions(autoOpenLatest=false){
+    const box=$('#chatHistoryList');if(!box)return;
+    try{
+      let r=await fetch('/api/chat/sessions');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      let d=await r.json();
+      const items=d.items||[];
+      renderChatSessionItems(box,items);
+      if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
+    }catch(e){
+      console.warn('chat history load failed',e);
+      try{
+        const r=await nativeFetch('/api/chat/sessions',{headers:{'X-TradeFlow-Store':'default'}});
+        if(!r.ok)throw new Error('fallback HTTP '+r.status);
+        const d=await r.json(),items=d.items||[];
+        renderChatSessionItems(box,items);
+        if(autoOpenLatest&&!currentChatId&&items.length)loadChatSession(items[0].id);
+      }catch(fallbackError){
+        console.warn('chat history fallback failed',fallbackError);
+        box.innerHTML='<div style="font-size:12px;color:var(--dim);padding:5px 2px">暂无历史</div>';
+      }
+    }
+  }
+  async function ensureChatSession(firstText,agent){
+    if(currentChatId)return currentChatId;
+    const r=await fetch('/api/chat/sessions',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title:firstText||'新对话',agent:agent||'default'})});
+    if(!r.ok)throw new Error('创建对话失败');
+    const d=await r.json();currentChatId=d.id;loadChatSessions();return currentChatId;
+  }
+  async function saveChatMessage(role,content){
+    if(!currentChatId)return;
+    try{await fetch('/api/chat/sessions/'+encodeURIComponent(currentChatId)+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({role,content})});loadChatSessions();}catch(e){}
+  }
+  function resetChatCanvas(refreshList=true){
+    inner.innerHTML=HELLO_HTML;started=false;selected=null;chatHistory=[];currentChatId=null;scrollDown();
+    if(refreshList)loadChatSessions();
+  }
+  async function loadChatSession(id){
+    try{
+      currentChatId=id;setActiveHistoryItem(id);go('chat');
+      const r=await fetch('/api/chat/sessions/'+encodeURIComponent(id));
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      currentChatId=id;inner.innerHTML='';selected=null;chatHistory=[];
+      const agentSel=$('#agentSel');
+      if(agentSel&&d.agent&&[...agentSel.options].some(o=>o.value===d.agent))setCurrentAgent(d.agent);
+      const messages=d.messages||[];
+      if(!messages.length){inner.innerHTML=HELLO_HTML;started=false;}
+      else{started=true;}
+      messages.forEach(m=>{
+        const content=String(m.content||'');
+        if(m.role==='user')addUser(content);else addAgent('<div class="bubble"><div>'+fmt(content)+'</div></div>');
+        chatHistory.push({role:m.role,content:content.slice(0,4000)});
+      });
+      if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
+      loadChatSessions();scrollDown();go('chat');
+    }catch(e){
+      console.warn('chat session load failed',e);
+      toast('历史对话打开失败');
+      currentChatId=null;setActiveHistoryItem(null);loadChatSessions();
+    }
+  }
+  function remember(role,content,persist=true){
+    const text=String(content||'').replace(/\s+/g,' ').trim();
+    if(!text)return Promise.resolve();
+    chatHistory.push({role,content:text.slice(0,4000)});
+    if(chatHistory.length>10)chatHistory=chatHistory.slice(-10);
+    return persist?saveChatMessage(role,text.slice(0,4000)):Promise.resolve();
+  }
 
   function thinking(label,then){
     const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'+label+'</div></div>');
@@ -683,6 +862,7 @@ button.imgbox{font-family:inherit}
   // 轻量意图路由：把请求分到对应的真智能体，其余走通用。顺序=从具体到宽泛。
   function pickAgent(q){q=(q||'').toLowerCase();
     if(/(合规|违规|禁词|极限词|审一?下|审核|侵权|能不能用|违禁)/.test(q))return 'compliance';
+    if(/(广告|acos|竞价|否词|否定词|加预算|降价|搜索词报表|广告报表|ppc|campaign|search term)/.test(q))return 'ads';
     if(/(拆解|拆一下|竞品|对标|爆款|逆向|asin|b0[0-9a-z]{8})/.test(q))return 'teardown';
     if(/(选品|机会商品|机会|值得做|要不要做|能不能做|挖|蓝海|选个?品)/.test(q))return 'selection';
     if(/(市场|类目|赛道|红海|竞争格局|体量|价格带|研判|大盘|供需)/.test(q))return 'market';
@@ -694,24 +874,144 @@ button.imgbox{font-family:inherit}
     return (v&&v!=='auto')?v:pickAgent(text);}
   // 智能体 key→中文名，初始给默认值，init 时用 /api/agents 覆盖为注册表真实展示名。
   let AGENT_CN={default:'通用助手',compliance:'#1 合规风控',listing:'#2 Listing 文案',
-    imagery:'#3 图文提示词',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'#7 智能选品'};
+    imagery:'#3 图文提示词',ads:'#4 广告优化',teardown:'#5 爆款拆解',market:'#6 市场分析',selection:'机会上新'};
   // 把当前店铺/站点作为上下文带给后端（仅拼进发送内容，气泡仍只显示用户原话）。
   function storeContext(){const s=stores.find(x=>x.id===curStore);
     return s?`【店铺上下文：${s.name} · ${MK[s.mk]}站(${s.mk})】\n`:'';}
-  // 极简 markdown → HTML：转义后处理 **粗体**、`代码`、换行。
-  function fmt(s){let h=esc(String(s==null?'':s));
-    h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>');
-    return h.replace(/\n/g,'<br>');}
-  async function respondReal(text){
+  // 轻量 markdown -> 产品化消息块：标题、段落、列表、引用、代码块、表格、粗体、代码。
+  const mdPlaceholders=[];
+  function stash(html){const key='@@MD'+mdPlaceholders.length+'@@';mdPlaceholders.push([key,html]);return key;}
+  function inlineFmt(s){
+    mdPlaceholders.length=0;
+    let h=esc(String(s==null?'':s));
+    h=h.replace(/`([^`]+?)`/g,(_,x)=>stash('<code>'+esc(x)+'</code>'));
+    h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<b>$1</b>');
+    h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    for(const [key,val] of mdPlaceholders)h=h.split(key).join(val);
+    return h;
+  }
+  function tableCells(line){let raw=line.trim();if(raw.startsWith('|'))raw=raw.slice(1);if(raw.endsWith('|'))raw=raw.slice(0,-1);return raw.split('|').map(x=>x.trim());}
+  function isTableSep(line){const cells=tableCells(line);return cells.length>1&&cells.every(c=>/^:?-{3,}:?$/.test(c));}
+  function looksLikeTableRow(line){const t=line.trim();return t.includes('|')&&(t.startsWith('|')||/\s\|\s/.test(t));}
+  function isNumericCell(s){return /^[$¥€£]?\s*-?\d[\d,]*(\.\d+)?%?$/.test(String(s).trim());}
+  function isRenderableTable(head,rows,colCount){
+    const all=[head,...rows], counts=all.map(r=>r.length);
+    if(colCount<2||colCount>10)return false;
+    if(!counts.every(c=>Math.abs(c-colCount)<=1))return false;
+    const totalSlots=all.length*colCount;
+    const cells=all.flat().map(x=>String(x||'').trim()).filter(Boolean);
+    const filledRatio=cells.length/Math.max(totalSlots,1);
+    const avgLen=cells.reduce((n,x)=>n+x.length,0)/Math.max(cells.length,1);
+    // 伪表格常见特征：列很多、每格只有一两个词/字母，渲染后会变成竖排碎片。
+    if(colCount>=6&&avgLen<8)return false;
+    if(filledRatio<0.55)return false;
+    return true;
+  }
+  function isProseTable(head,rows){
+    const cells=[head,...rows].flat().map(x=>String(x||'').trim()).filter(Boolean);
+    if(!cells.length)return false;
+    const longCells=cells.filter(x=>x.length>70).length;
+    const avgLen=cells.reduce((n,x)=>n+x.length,0)/cells.length;
+    // 证据说明、原因分析、文案对照这类“长文本表格”用表格硬排会碎词竖排，改成卡片字段展示。
+    return longCells>=2||avgLen>36;
+  }
+  function renderRecordTable(head,rows){
+    const safeHead=head.map((h,idx)=>String(h||('列 '+(idx+1))).trim()||('列 '+(idx+1)));
+    const cards=rows.map(row=>{
+      const fields=safeHead.map((h,idx)=>{
+        const val=String(row[idx]||'').trim();
+        if(!val)return '';
+        return '<div class="md-field"><b>'+inlineFmt(h)+'</b><span>'+inlineFmt(val)+'</span></div>';
+      }).join('');
+      return fields?'<div class="md-record">'+fields+'</div>':'';
+    }).filter(Boolean).join('');
+    return '<div class="md-records">'+cards+'</div>';
+  }
+  function normalizeAssistantText(s){
+    let t=String(s==null?'':s).replace(/\r\n/g,'\n');
+    // 展示层做通用清洗：还原常见 HTML 实体，并把被压成一行的 Markdown 结构恢复为块。
+    // 重点是按 Markdown 结构处理，而不是按某个业务场景或某个 SKU 做 case-by-case。
+    t=t.replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&');
+    t=t.replace(/\s+---\s+/g,'\n\n---\n\n');
+    t=t.replace(/\s+(#{2,4}\s+)/g,'\n\n$1');
+    t=t.replace(/\s+(✅\s*\d+[.)]\s*)/g,'\n\n$1');
+    t=t.replace(/([：:])\s+-\s+/g,'$1\n- ');
+    t=t.replace(/([。；;])\s+-\s+/g,'$1\n- ');
+    t=t.replace(/(✅\s*\d+[.)]\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
+    t=t.replace(/(#{2,4}\s*[^-\n]+?)\s+-\s+/g,'$1\n- ');
+    t=t.replace(/\s+-\s+(?=(?:\*\*)?[A-Z0-9][A-Z0-9-]{2,}|立即|核实|优化|重新|加强|建立|需要|输入|扫描|返回|获取|检查|考虑)/g,'\n- ');
+    t=t.replace(/[；;]\s*[▪■]\s*/g,'；\n- ');
+    t=t.replace(/\s+[▪■]\s*/g,'\n- ');
+    t=t.replace(/([。；;])\s*→\s*/g,'$1\n→ ');
+    t=t.replace(/\s+(→\s*调用\s+)/g,'\n$1');
+    t=t.replace(/\n{3,}/g,'\n\n');
+    return t.trim();
+  }
+  function renderTable(lines,start){
+    const head=tableCells(lines[start]), rows=[];let i=start+(isTableSep(lines[start+1]||'')?2:1);
+    while(i<lines.length&&looksLikeTableRow(lines[i])&&!isTableSep(lines[i])){rows.push(tableCells(lines[i]));i++;}
+    const colCount=Math.max(head.length,...rows.map(r=>r.length));
+    if(!isRenderableTable(head,rows,colCount)){
+      const raw=lines.slice(start,i).filter(line=>!isTableSep(line)).join('\n');
+      return {html:'<div class="plain-block">'+inlineFmt(raw)+'</div>',next:i};
+    }
+    if(isProseTable(head,rows)){
+      return {html:renderRecordTable(head,rows),next:i};
+    }
+    const norm=a=>Array.from({length:colCount},(_,idx)=>a[idx]||'');
+    const header=norm(head), bodyRows=rows.map(norm);
+    const th=header.map((c,idx)=>'<th class="'+(bodyRows.every(r=>!r[idx]||isNumericCell(r[idx]))?'num':'')+'">'+inlineFmt(c)+'</th>').join('');
+    const body=bodyRows.map(r=>'<tr>'+r.map(c=>'<td class="'+(isNumericCell(c)?'num':'')+'">'+inlineFmt(c)+'</td>').join('')+'</tr>').join('');
+    const minWidth=Math.max(560,colCount*140);
+    return {html:'<div class="md-table-wrap"><table class="md-table" style="--table-min:'+minWidth+'px"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table></div>',next:i};
+  }
+  function renderList(items,ordered){return '<'+(ordered?'ol':'ul')+'>'+items.map(x=>'<li>'+inlineFmt(x)+'</li>').join('')+'</'+(ordered?'ol':'ul')+'>';}
+  function fmt(s){
+    const lines=normalizeAssistantText(s).split('\n');
+    const out=[];let p=[],list=null,listOrdered=false,quote=[];
+    const flushP=()=>{if(p.length){out.push('<p>'+p.map(inlineFmt).join('<br>')+'</p>');p=[];}};
+    const flushList=()=>{if(list){out.push(renderList(list,listOrdered));list=null;}};
+    const flushQuote=()=>{if(quote.length){out.push('<blockquote>'+quote.map(inlineFmt).join('<br>')+'</blockquote>');quote=[];}};
+    const flushAll=()=>{flushP();flushList();flushQuote();};
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i], trimmed=line.trim();
+      if(/^```/.test(trimmed)){
+        flushAll();const code=[];i++;
+        while(i<lines.length&&!/^```/.test(lines[i].trim())){code.push(lines[i]);i++;}
+        out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');continue;
+      }
+      if(!trimmed){flushAll();continue;}
+      if(/^---+$/.test(trimmed)){flushAll();out.push('<hr>');continue;}
+      // 只有符合 GFM 表格语法：表头行 + 分隔行，才按表格渲染。
+      // 普通文本里出现多个 | 或类似多列内容时，不能误判成表格，否则会被挤成竖排乱码。
+      if(looksLikeTableRow(trimmed)&&isTableSep(lines[i+1]||'')){flushAll();const t=renderTable(lines,i);out.push(t.html);i=t.next-1;continue;}
+      const h=trimmed.match(/^(#{2,4})\s+(.+)$/);
+      if(h){flushAll();const tag=h[1].length===4?'h4':h[1].length===3?'h3':'h2';out.push('<'+tag+'>'+inlineFmt(h[2])+'</'+tag+'>');continue;}
+      const checked=trimmed.match(/^✅\s*(\d+)[.)]\s+(.+)$/);
+      if(checked){flushAll();out.push('<h3>✅ '+checked[1]+'. '+inlineFmt(checked[2])+'</h3>');continue;}
+      if(/^→\s*/.test(trimmed)){flushAll();out.push('<div class="arrow-line">'+inlineFmt(trimmed)+'</div>');continue;}
+      const q=trimmed.match(/^>\s?(.*)$/);
+      if(q){flushP();flushList();quote.push(q[1]);continue;}
+      const li=trimmed.match(/^[-*•▪■]\s+(.+)$/), oli=trimmed.match(/^\d+[.)]\s+(.+)$/);
+      if(li||oli){flushP();flushQuote();const ordered=Boolean(oli);if(list&&listOrdered!==ordered)flushList();if(!list){list=[];listOrdered=ordered;}list.push((li||oli)[1]);continue;}
+      flushList();flushQuote();p.push(line);
+    }
+    flushAll();
+    return '<div class="md">'+out.join('')+'</div>';
+  }
+  async function respondReal(text, historyOverride=null){
     const agent=chosenAgent(text);
+    const history=historyOverride||chatHistory.slice(-8);
     // 思考气泡带一个 .live 状态行，随 SSE 事件实时更新，避免长任务像卡死。
-    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
+    const mkThink=()=>addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span>'
       +'<span class="live">'+AGENT_CN[agent]+' 思考中…</span></div></div>');
-    const setLive=(s)=>{const el=t.querySelector('.live');if(el)el.textContent=s;scrollDown();};
-    let toolsSeen=[],gotFinal=false;
+    let think=mkThink(), toolsSeen=[], ans=null, streamEl=null, raw='',gotFinal=false;
+    const setLive=(s)=>{const el=think&&think.querySelector('.live');if(el)el.textContent=s;scrollDown();};
+    // 首个 token 到达时：移除思考气泡，建答案气泡，之后逐字追加（打字机效果）。
+    const ensureAns=()=>{if(!ans){if(think){think.remove();think=null;}ans=addAgent('<div class="bubble"><span class="stream"></span></div>');streamEl=ans.querySelector('.stream');}};
     try{
       const r=await fetch('/api/chat/stream',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent})});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
       if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
       const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
       while(true){
@@ -725,41 +1025,38 @@ button.imgbox{font-family:inherit}
           if(!line)continue;
           const evt=JSON.parse(line.slice(5).trim());
           if(evt.type==='status'){
-            setLive(AGENT_CN[agent]+' · '+evt.message);
+            if(!ans)setLive(AGENT_CN[agent]+' · '+evt.message);
             if(evt.tools&&evt.tools.length)toolsSeen=toolsSeen.concat(evt.tools);
+          }else if(evt.type==='token'){
+            ensureAns();raw+=evt.text;streamEl.textContent=raw;scrollDown();
+          }else if(evt.type==='reset'){
+            // 工具轮的临时开场白，丢弃、回到"思考中"状态，等真正的答案。
+            if(ans){ans.remove();ans=null;streamEl=null;raw='';}
+            if(!think)think=mkThink();
           }else if(evt.type==='final'){
-            gotFinal=true;t.remove();
+            gotFinal=true;
+            const full=evt.reply||raw;
+            remember('assistant',full);
             const badge=toolsSeen.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(toolsSeen.join(', '))}</div>`:'';
-            addAgent('<div class="bubble"><div>'+fmt(evt.reply)+'</div>'+badge+'</div>');
+            if(ans){ans.querySelector('.bubble').innerHTML='<div>'+fmt(full)+'</div>'+badge;}
+            else{if(think)think.remove();addAgent('<div class="bubble"><div>'+fmt(full)+'</div>'+badge+'</div>');}
+            scrollDown();
           }else if(evt.type==='error'){
-            gotFinal=true;t.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');
+            if(ans)ans.querySelector('.bubble').innerHTML='<div>⚠️ 出错：'+esc(evt.error)+'</div>';
+            else{if(think)think.remove();addAgent('<div class="bubble"><div>⚠️ 出错：'+esc(evt.error)+'</div></div>');}
           }
         }
       }
       if(!gotFinal)throw new Error('流式连接中断（无 final 事件）');
     }catch(e){
-      // 流式失败（最常见：反向代理 / CDN 不支持 SSE 长连接，返回 502/504）→
-      // 自动回退到非流式 /api/chat（一次性 JSON，可穿透几乎任何代理）。
-      if(!gotFinal)await chatFallback(text,agent,t,setLive);
-    }
-  }
-  // 非流式兜底：一次性 POST /api/chat，绕开不支持 SSE 的代理层。
-  async function chatFallback(text,agent,t,setLive){
-    setLive(AGENT_CN[agent]+' · 处理中（兼容模式）…');
-    try{
-      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:storeContext()+text,agent})});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const d=await r.json();
-      t.remove();
-      const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
-      const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">经 ${AGENT_CN[agent]} · 调用工具：${esc(tools.join(', '))}</div>`:'';
-      addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
-    }catch(e){
-      t.remove();
-      addAgent('<div class="bubble"><div>⚠️ 调用后端失败：'+esc(String(e.message||e))
-        +'。请检查 web 服务是否在运行，以及反向代理是否放行 /api 路径。</div></div>');
-    }
+      if(ans)ans.remove();if(think)think.remove();
+      try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:storeContext()+text,agent,history})});
+        if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+        remember('assistant',d.reply);
+        const tools=[...new Set((d.steps||[]).flatMap(s=>s.tools||[]))];
+        const badge=tools.length?`<div class="step" style="margin-top:8px;opacity:.7">兼容模式 · 调用工具：${esc(tools.join(', '))}</div>`:'';
+        addAgent('<div class="bubble"><div>'+fmt(d.reply)+'</div>'+badge+'</div>');
+      }catch(fallbackError){addAgent('<div class="bubble"><div>⚠️ 后端调用失败：'+esc(String(fallbackError.message||fallbackError))+'</div></div>');}}
   }
   /* ---- 选品：调结构化接口出可「放入机会上新」的机会卡（B0） ---- */
   let lastSuggest=[];
@@ -771,12 +1068,12 @@ button.imgbox{font-family:inherit}
         ${o.reason?`<div style="font-size:11.5px;color:var(--dim);margin-top:3px">${esc(o.reason)}</div>`:''}</div>
       <span class="pill amber">评分 ${esc(String(o.score==null?'-':o.score))}</span>
       <button class="btn primary sm suggPick" data-i="${i}">放入机会上新</button></div>`).join('');
-    return `<div class="bubble"><div>为你研判出 ${items.length} 个机会商品（AI 研判，暂未接实时竞品数据）：</div>
+    return `<div class="bubble"><div>基于真实竞品/导入数据研判出 ${items.length} 个可上新的机会商品：</div>
       <div class="rc" style="margin-top:10px"><div class="rc-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5s5 1 5 6-4 8-4 8"/></svg>机会商品 · 选品研判</div>${rows}</div>
       ${chips(['换一批看看','厨房家居类目有什么机会？'])}</div>`;
   }
   async function respondSelection(text){
-    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span><span class="live">#7 智能选品 · 研判机会商品 …</span></div></div>');
+    const t=addAgent('<div class="bubble bare"><div class="step"><span class="sp"></span><span class="live">机会上新 · 发现机会商品 …</span></div></div>');
     try{
       const d=await (await fetch('/api/opportunities/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({query:storeContext()+text})})).json();
@@ -784,7 +1081,8 @@ button.imgbox{font-family:inherit}
       lastSuggest=(d&&d.items)||[];
       if(!lastSuggest.length){addAgent('<div class="bubble"><div>这次没研判出明确机会，换个类目 / 关键词再试试？</div></div>');return;}
       addAgent(suggestCard(lastSuggest));
-    }catch(e){t.remove();addAgent('<div class="bubble"><div>⚠️ 选品失败：'+esc(String(e.message||e))+'</div></div>');}
+      remember('assistant','基于真实竞品/导入数据研判出 '+lastSuggest.length+' 个可上新的机会商品，已展示为机会卡片。');
+    }catch(e){t.remove();addAgent('<div class="bubble"><div>⚠️ 机会发现失败：'+esc(String(e.message||e))+'</div></div>');}
   }
   async function addSuggestToOpps(i){
     const it=lastSuggest[i];if(!it)return;
@@ -799,8 +1097,13 @@ button.imgbox{font-family:inherit}
   }
 
   /* input handling */
-  function submitInput(text){if(!text.trim())return;addUser(text.trim());$('#chatInp').value='';autosize();
-    if(chosenAgent(text)==='selection')respondSelection(text.trim());else respondReal(text.trim());}
+  async function submitInput(text){const clean=text.trim();if(!clean)return;
+    const agent=chosenAgent(clean);
+    const historyBefore=chatHistory.slice(-8);
+    try{await ensureChatSession(clean,agent);}catch(e){toast('对话保存初始化失败');}
+    addUser(clean);$('#chatInp').value='';autosize();await remember('user',clean);
+    if(agent==='selection'){respondSelection(clean);}
+    else{respondReal(clean,historyBefore);}}
   $('#chatSend').onclick=()=>submitInput($('#chatInp').value);
   $('#chatInp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitInput($('#chatInp').value);}});
   function autosize(){const t=$('#chatInp');t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
@@ -813,27 +1116,31 @@ button.imgbox{font-family:inherit}
     const sp=e.target.closest('.suggPick');if(sp){addSuggestToOpps(+sp.dataset.i);return;}
     const ai=e.target.closest('.addImg');if(ai){addImgFromChat(ai.dataset.k,decodeURIComponent(ai.dataset.bg),ai.dataset.role);return;}
     const gi=e.target.closest('.gotoImg');if(gi){go('listing');openEditor(opps.find(o=>o.key===gi.dataset.k)||{...OPP[gi.dataset.k]});return;}
+    const hist=e.target.closest('[data-chat-id]');if(hist){loadChatSession(hist.dataset.chatId);return;}
   });
-  $('#newChat').onclick=()=>{inner.innerHTML='';started=false;selected=null;location.reload();};
+  $('#newChat').onclick=()=>resetChatCanvas();
 
   /* ---------- module: 机会上新（后端持久化 CRUD，B1） ---------- */
   let opps=[];
-  const DEFAULT_OPPS=[OPP.hum,OPP.lamp,OPP.mount,OPP.bamboo,OPP.led,OPP.bottle];
   async function loadOpps(){
     try{
       let d=await (await fetch('/api/opportunities')).json();
-      if(!d.items||!d.items.length){                 // 首次：把演示默认项种进后端
-        for(const o of DEFAULT_OPPS)
-          await fetch('/api/opportunities',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({...o,fromChat:false})});
-        d=await (await fetch('/api/opportunities')).json();
-      }
       opps=d.items||[];
-    }catch(e){opps=DEFAULT_OPPS.map(o=>({...o}));}    // 后端不可用则退回本地展示
+    }catch(e){opps=[];}
     renderOpps();
   }
   function renderOpps(){
-    const g=$('#oppGrid');g.innerHTML='';$('#oppBadge').textContent=opps.length;
+    const g=$('#oppGrid');if(!g)return;g.innerHTML='';
+    const badge=$('#oppBadge');if(badge)badge.textContent=opps.length;
+    if(!opps.length){
+      g.innerHTML=`<div class="card" style="grid-column:1/-1;text-align:center;padding:34px">
+        <h3 style="margin-bottom:8px">还没有确认的上新机会</h3>
+        <p style="color:var(--dim);line-height:1.7;margin-bottom:16px">先让 TradeFlow AI 基于当前店铺、导入报表或指定类目发现机会商品。确认后，商品会进入这里继续生成 Listing、图片方案和合规预检。</p>
+        <button class="btn primary" id="emptyDiscoverOpp">发现上新机会</button>
+      </div>`;
+      const b=$('#emptyDiscoverOpp');if(b)b.onclick=startOpportunityDiscovery;
+      return;
+    }
     opps.forEach(o=>{const c=document.createElement('div');c.className='opp';
       c.innerHTML=`<div class="cover" style="background:${o.cover}">${o.name}</div>
         <div class="body"><h4>${o.name}</h4>
@@ -858,6 +1165,7 @@ button.imgbox{font-family:inherit}
     $('#gotoOpp').onclick=()=>{go('listing');const it=opps.find(o=>o.key===k);if(it)openEditor(it);};
     toast(OPP[k].name+' 已加入机会上新');
   }
+  const discoverOppBtn=$('#discoverOppBtn');if(discoverOppBtn)discoverOppBtn.onclick=startOpportunityDiscovery;
   const imagesByKey={},keywordsByKey={};let editKey=null,editItem=null;
   function defImgs(){return [
     {role:'主图',bg:'linear-gradient(135deg,#0d8a80,#12a89b)',label:'白底产品图'},
@@ -953,84 +1261,90 @@ button.imgbox{font-family:inherit}
     }catch(e){$('#checkResult').innerHTML='<div class="note" style="background:var(--crit-weak);color:var(--crit)">生成失败：'+esc(String(e.message||e))+'</div>';}
     finally{btn.disabled=false;btn.innerHTML=orig;}
   };
-  $('#publishBtn').onclick=()=>{$('#publishBtn').disabled=true;$('#publishBtn').textContent='上传中…';
-    setTimeout(()=>{$('#publishBtn').disabled=false;$('#publishBtn').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5s5 1 5 6-4 8-4 8l-4-4s3-3 3-6-.5-4-.5-4z"/></svg>一键上传亚马逊';
-      $('#checkResult').innerHTML='<div class="note" style="background:var(--good-weak);color:var(--good)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>已提交上架 · Feed <span class="mono" style="color:inherit">feed_90417</span> 处理中，约 15 分钟内生效。</div>';toast('Listing 已提交上架');},1600);};
+  $('#publishBtn').onclick=()=>{toast('尚未配置 Amazon SP-API，P0 请复制或导出后手动上架');};
 
   /* ---------- module: import ---------- */
   $$('#importTabs .tab').forEach(t=>t.onclick=()=>{$$('#importTabs .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
     $('#tab-amazon').style.display=t.dataset.t==='amazon'?'':'none';$('#tab-excel').style.display=t.dataset.t==='excel'?'':'none';});
-  const syncSteps=['连接 SP-API…','拉取 Listing…','拉取订单…','解析入库…','完成'];
-  $('#syncBtn').onclick=()=>{const p=$('#syncProg');p.style.display='block';$('#syncBtn').disabled=true;let i=0;
-    const iv=setInterval(()=>{const pct=Math.min(100,Math.round((i+1)/syncSteps.length*100));
-      $('#syncBar').style.width=pct+'%';$('#syncPct').textContent=pct+'%';$('#syncMsg').textContent=syncSteps[Math.min(i,syncSteps.length-1)];
-      if(++i>=syncSteps.length){clearInterval(iv);$('#syncBtn').disabled=false;const r=$('#histTbl').insertRow(1);
-        r.innerHTML='<td><span class="pill accent"><span class="d"></span>后台</span></td><td>Listing + 订单</td><td class="mono">312</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>';toast('同步完成 · 导入 312 行');}},600);};
-  $('#fileInp').onchange=e=>{if(e.target.files[0])$('#fileName').textContent=e.target.files[0].name;$('#mapping').style.display='block';};
-  $('#cancelMap').onclick=()=>{$('#mapping').style.display='none';$('#fileInp').value='';};
-  $('#confirmMap').onclick=()=>{$('#mapping').style.display='none';const r=$('#histTbl').insertRow(1);
-    r.innerHTML='<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>广告报表</td><td class="mono">1,204</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>';toast('Excel 导入完成 · 1,204 行');};
+  $('#syncBtn').onclick=()=>toast('尚未配置 Amazon SP-API 授权，请使用 Excel 导入真实报表');
+  let importPreview=null;
+  const mapFields=[['','忽略'],['sku','SKU'],['asin','ASIN'],['title','商品标题'],['brand','品牌'],['price','价格'],['rating','评分'],['review_count','评论数'],['campaign','广告活动'],['search_term','搜索词'],['impressions','曝光量'],['clicks','点击量'],['spend','花费'],['sales','销售额'],['orders','订单数'],['quantity','数量'],['stock','库存'],['order_id','订单号'],['buyer','买家/收件人'],['purchase_date','下单时间']];
+  $('#fileInp').onchange=async e=>{const file=e.target.files[0];if(!file)return;
+    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';status.textContent=`正在上传并快速预览 ${file.name}… 大文件会先读取表头和样例。`;
+    const fd=new FormData();fd.append('file',file);$('#fileName').textContent=file.name;$('#fileMeta').textContent='';
+    try{const r=await fetch('/api/imports/preview',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));
+      importPreview=await r.json();$('#fileMeta').textContent=` · ${importPreview.row_count} 行 · ${importPreview.columns.length} 列`;
+      status.style.color='var(--good)';status.textContent=`预览完成：${importPreview.row_count} 行、${importPreview.columns.length} 列，请确认字段映射。确认后再完整入库。`;
+      $('#mapping').style.display='block';
+      const tbl=$('#mappingTbl');tbl.innerHTML='<tr><th>Excel 列</th><th>示例值</th><th>映射字段</th></tr>';
+      importPreview.columns.forEach(c=>{const tr=tbl.insertRow(-1),example=(importPreview.preview[0]||{})[c]??'';
+        tr.innerHTML=`<td class="mono">${esc(c)}</td><td>${esc(String(example))}</td><td><select data-col="${esc(c)}">${mapFields.map(([v,l])=>`<option value="${v}"${importPreview.mapping[c]===v?' selected':''}>${l}</option>`).join('')}</select></td>`;});
+    }catch(err){const message=String(err.message||err);status.style.color='var(--crit)';status.textContent='解析失败：'+message;toast('解析失败：'+message);$('#mapping').style.display='none';}};
+  $('#cancelMap').onclick=()=>{$('#mapping').style.display='none';$('#uploadStatus').style.display='none';$('#fileInp').value='';};
+  $('#confirmMap').onclick=async()=>{const file=$('#fileInp').files[0];if(!file||!importPreview)return;
+    const mapping={};$$('#mappingTbl select').forEach(s=>{if(s.value)mapping[s.dataset.col]=s.value;});
+    const fd=new FormData();fd.append('file',file);fd.append('mapping',JSON.stringify(mapping));
+    $('#confirmMap').disabled=true;
+    const status=$('#uploadStatus');status.style.display='block';status.style.color='var(--dim)';
+    status.textContent=`正在完整导入 ${importPreview.row_count} 行数据… 大文件可能需要几十秒，请不要关闭页面。`;
+    try{const r=await fetch('/api/imports',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||('HTTP '+r.status));const d=await r.json();
+      $('#mapping').style.display='none';status.style.color='var(--good)';status.textContent=`导入完成：${d.row_count} 行已入库。`;
+      const row=$('#histTbl').insertRow(1);row.innerHTML=`<td><span class="pill amber"><span class="d"></span>Excel</span></td><td>${esc(d.report_type)}</td><td class="mono">${d.row_count}</td><td class="tnum">刚刚</td><td><span class="pill good">完成</span></td>`;toast(`Excel 导入完成 · ${d.row_count} 行`);
+      loadOptimize();loadCustomers();
+    }catch(err){status.style.color='var(--crit)';status.textContent='导入失败：'+String(err.message||err);toast('导入失败：'+String(err.message||err));}finally{$('#confirmMap').disabled=false;}};
 
   /* ---------- module: optimize ---------- */
-  const products=[
-    {sku:'AH-HUM-4L',asin:'B0C1X2Y3Z4',name:'Cool Mist Humidifier 4L',score:52,sc:'crit',
-     concl:[['crit','标题含极限词','命中「Best」「#1」，违反平台合规，需删除'],['warn','五点缺核心词','未覆盖高搜索词「cool mist」，影响自然流量'],['warn','库存偏低','按近 30 天动销，80 件约 6 天售罄，建议补货至 300']],
-     oldTitle:'Best Humidifier #1 Rated, Large Humidifier for Home',newTitle:'Cool Mist Humidifier 4L, Ultra Quiet Air Humidifier for Bedroom & Baby Room',
-     oldKw:'humidifier, home humidifier',newKw:'cool mist humidifier, quiet humidifier, bedroom humidifier, baby humidifier',
-     price:{cur:'25.99',sug:'23.99'},stock:{cur:'80',sug:'300'}},
-    {sku:'AH-LAMP-02',asin:'B0D4A5B6C7',name:'Sunset Projection Lamp',score:74,sc:'warn',
-     concl:[['warn','五点卖点分散','建议按「氛围-场景-礼物」重排突出送礼场景'],['warn','定价偏低','低于竞品均价 $22.9，建议上调守住毛利']],
-     oldTitle:'Sunset Lamp Projector 16 Colors LED Night Light',newTitle:'Sunset Projection Lamp, 16 Colors Romantic Mood Light — Perfect Gift for Bedroom & Parties',
-     oldKw:'sunset lamp, night light',newKw:'sunset projection lamp, mood light, gift for her, room decor aesthetic',
-     price:{cur:'19.99',sug:'22.99'},stock:{cur:'150',sug:'150'}},
-    {sku:'AH-DIFF-08',asin:'B0E7C8D9E0',name:'Aroma Diffuser 500ml',score:88,sc:'good',
-     concl:[['good','文案健康','合规、关键词、转化均达标，建议维持并投放广告'],['warn','库存不足','45 件，旺季前建议补货至 250'],['warn','价格高于竞品','$21.99 高于同类 $19.9，转化承压，建议下调']],
-     oldTitle:'Aroma Diffuser 500ml Essential Oil Diffuser',newTitle:'Aroma Diffuser 500ml Essential Oil Diffuser',oldKw:'aroma diffuser',newKw:'aroma diffuser',
-     price:{cur:'21.99',sug:'19.99'},stock:{cur:'45',sug:'250'}},
-  ];
+  let products=[];
   const scoreColor=s=>s.sc==='crit'?['var(--crit-weak)','var(--crit)']:s.sc==='warn'?['var(--warn-weak)','var(--warn)']:['var(--good-weak)','var(--good)'];
-  function renderPlist(){const w=$('#plist');w.innerHTML='';products.forEach((p,i)=>{const[bg,fg]=scoreColor(p);
+  async function loadOptimize(){
+    const w=$('#plist'),d=$('#detail');if(!w||!d)return;
+    w.innerHTML='<div style="font-size:12px;color:var(--dim);padding:10px">正在读取导入数据…</div>';
+    d.innerHTML='';
+    try{
+      const r=await fetch('/api/optimization/ads');if(!r.ok)throw new Error('HTTP '+r.status);
+      const data=await r.json();
+      products=(data.items||[]).map(x=>({
+        name:x.campaign||'未命名广告活动',sku:'广告活动',asin:'真实导入报表',
+        score:x.score||0,sc:x.severity||'warn',raw:x,
+        concl:(x.recommendations||[]).map(r=>[r.level||'warn',r.title||'建议',r.detail||''])
+      }));
+      if(!products.length){
+        w.innerHTML='';
+        d.innerHTML=`<div class="card" style="text-align:center;padding:34px">
+          <h3 style="margin-bottom:8px">暂无可用优化建议</h3>
+          <p style="color:var(--dim);line-height:1.7;margin-bottom:16px">${esc(data.error||'请先在「数据导入」上传真实广告搜索词报表。')}</p>
+          <button class="btn primary" id="goImportAds">去上传广告报表</button>
+        </div>`;
+        const b=$('#goImportAds');if(b)b.onclick=()=>go('import');
+        return;
+      }
+      renderPlist();renderDetail(0);
+    }catch(e){
+      products=[];w.innerHTML='';
+      d.innerHTML='<div class="card" style="color:var(--crit)">优化建议加载失败：'+esc(String(e.message||e))+'</div>';
+    }
+  }
+  function renderPlist(){const w=$('#plist');if(!w)return;w.innerHTML='';products.forEach((p,i)=>{const[bg,fg]=scoreColor(p);
     const b=document.createElement('button');b.className='prow'+(i===0?' active':'');
-    b.innerHTML=`<span class="thumb" style="background:${fg}">${p.name.slice(0,2).toUpperCase()}</span><span class="info"><b>${p.name}</b><span class="mono">${p.asin}</span></span><span class="score" style="background:${bg};color:${fg}">${p.score}</span>`;
+    b.innerHTML=`<span class="thumb" style="background:${fg}">${esc(p.name.slice(0,2).toUpperCase())}</span><span class="info"><b>${esc(p.name)}</b><span class="mono">${esc(p.asin)}</span></span><span class="score" style="background:${bg};color:${fg}">${esc(p.score)}</span>`;
     b.onclick=()=>{$$('#plist .prow').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderDetail(i);};w.appendChild(b);});}
   function renderDetail(i){const p=products[i];const d=$('#detail');
+    if(!p){d.innerHTML='';return;}
     const ic=t=>t==='crit'?['var(--crit-weak)','var(--crit)','M12 9v4M12 17h.01']:t==='warn'?['var(--warn-weak)','var(--warn)','M12 9v4M12 17h.01']:['var(--good-weak)','var(--good)','M20 6L9 17l-5-5'];
-    const fields=[
-      {k:'title',label:'标题 Title',cur:p.oldTitle,sug:p.newTitle,mono:false},
-      {k:'keywords',label:'关键词 Search Terms',cur:p.oldKw,sug:p.newKw,mono:true},
-      {k:'price',label:'价格 Price (USD)',cur:p.price.cur,sug:p.price.sug,mono:true,pre:'$'},
-      {k:'stock',label:'库存 Stock (件)',cur:p.stock.cur,sug:p.stock.sug,mono:true},
-    ];
-    const ea=s=>String(s).replace(/"/g,'&quot;');
-    const fieldHtml=f=>{const pre=f.pre||'';
-      return `<div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;margin-bottom:6px"><span style="font-size:12px;color:var(--dim);font-weight:600">${f.label}</span>
-          <button class="btn ghost sm adopt-one" data-k="${f.k}" style="margin-left:auto;padding:3px 9px">采纳此项</button></div>
-        <div class="diff"><div class="col"><div class="h">当前</div><div class="old${f.mono?' mono':''}"${f.mono?' style="font-size:12px"':''}>${pre}${f.cur}</div></div>
-          <div class="col"><div class="h sug">建议（同步你的编辑）</div><div${f.mono?' class="mono" style="font-size:12px"':''}>${pre}<span id="sug_${f.k}">${f.sug}</span></div></div></div>
-        <input type="text" id="ed_${f.k}" value="${ea(f.sug)}"${f.mono?' class="mono"':''}></div>`;};
+    const r=p.raw||{},pct=v=>v==null?'无销售':(Number(v)*100).toFixed(1)+'%';
     d.innerHTML=`<div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><div><h3 style="font-size:16px">${p.name}</h3><span class="mono" style="font-size:12px;color:var(--dim)">${p.asin} · ${p.sku}</span></div><span class="pill mute" style="margin-left:auto">健康分 ${p.score}</span></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><div><h3 style="font-size:16px">${esc(p.name)}</h3><span class="mono" style="font-size:12px;color:var(--dim)">来自真实广告报表 · ${esc(String(r.campaign||''))}</span></div><span class="pill mute" style="margin-left:auto">健康分 ${esc(p.score)}</span></div>
+      <div class="metrics" style="margin-bottom:16px"><div>花费<b>${esc((r.spend||0).toFixed?r.spend.toFixed(2):String(r.spend||0))}</b></div><div>销售额<b>${esc((r.sales||0).toFixed?r.sales.toFixed(2):String(r.sales||0))}</b></div><div>订单<b>${esc(String(r.orders||0))}</b></div><div>ACOS<b>${esc(pct(r.acos))}</b></div></div>
       <h4 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-bottom:10px">Agent 结论</h4>
-      ${p.concl.map(c=>{const[bg,fg,pth]=ic(c[0]);return`<div class="concl"><div class="ico" style="background:${bg};color:${fg}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${pth}"/></svg></div><div><b>${c[1]}</b><p>${c[2]}</p></div></div>`}).join('')}</div>
-      <div class="card"><div style="display:flex;align-items:center;margin-bottom:6px"><h3 style="font-size:15px">修改并提交</h3><div style="margin-left:auto;display:flex;gap:9px"><button class="btn sm" id="adopt">采纳全部建议</button><button class="btn primary sm" id="submit">提交到亚马逊</button></div></div>
-        <p style="font-size:12px;color:var(--dim);margin:0 0 14px">输入框即“将提交到亚马逊”的内容，默认填入 Agent 建议。你的编辑会实时同步到上方「建议」；标题、关键词、价格、库存一并回写。</p>
-        ${fields.map(fieldHtml).join('')}
+      ${p.concl.map(c=>{const[bg,fg,pth]=ic(c[0]);return`<div class="concl"><div class="ico" style="background:${bg};color:${fg}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${pth}"/></svg></div><div><b>${esc(c[1])}</b><p>${esc(c[2])}</p></div></div>`}).join('')}</div>
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:6px"><h3 style="font-size:15px">下一步</h3><div style="margin-left:auto;display:flex;gap:9px"><button class="btn primary sm" id="askAds">在对话中深度分析</button></div></div>
+        <p style="font-size:12px;color:var(--dim);line-height:1.8;margin:0">当前 MVP 不模拟写回亚马逊。请把建议复制到 Seller Central 手动执行；如果需要否定词、降竞价或预算动作清单，点击上方按钮让 TradeFlow AI 基于这份真实报表继续分析。</p>
         <div id="subStatus"></div></div>`;
-    // 输入框为主：编辑实时同步到「建议」列，采纳采纳的即是你改后的内容
-    fields.forEach(f=>{const inp=$('#ed_'+f.k),sugEl=$('#sug_'+f.k);
-      inp.addEventListener('input',()=>{f.sug=inp.value;if(sugEl)sugEl.textContent=inp.value;});});
-    d.querySelectorAll('.adopt-one').forEach(b=>b.onclick=()=>{const f=fields.find(x=>x.k===b.dataset.k);$('#ed_'+f.k).value=f.sug;toast('已采纳「'+f.label.split(' ')[0]+'」');});
-    $('#adopt').onclick=()=>{fields.forEach(f=>$('#ed_'+f.k).value=f.sug);toast('已采纳全部建议');};
-    $('#submit').onclick=()=>{const s=$('#subStatus');const vals=fields.map(f=>({label:f.label.split(' ')[0],k:f.k,v:$('#ed_'+f.k).value,pre:f.pre||''}));
-      s.innerHTML='<div style="display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px;color:var(--dim)"><span class="pill warn">提交中</span>正在写入 SP-API（Listing / 价格 / 库存）…</div>';
-      setTimeout(()=>{
-        s.innerHTML=`<div style="margin-top:14px"><div style="display:flex;align-items:center;gap:9px;font-size:13px;margin-bottom:9px"><span class="pill good">已提交</span><span style="color:var(--dim)">Feed 处理中 · <span class="mono">feed_88213</span></span></div><div style="font-size:12px;color:var(--dim);line-height:1.8">${vals.map(x=>'· '+x.label+'：'+x.pre+esc(x.v)).join('<br>')}</div></div>`;
-        p.oldTitle=vals[0].v;p.oldKw=vals[1].v;p.price.cur=vals[2].v;p.stock.cur=vals[3].v;p.score=Math.min(95,p.score+20);p.sc='good';
-        renderPlist();$$('#plist .prow').forEach(x=>x.classList.remove('active'));$$('#plist .prow')[i].classList.add('active');toast('已提交到亚马逊');},1400);};}
+    const ask=$('#askAds');if(ask)ask.onclick=()=>{setCurrentAgent('ads');go('chat');submitInput('基于我刚上传的广告报表，重点分析广告活动「'+p.name+'」的问题，并给出可执行优化动作');};
+  }
 
   /* ---------- module: email ---------- */
-  const customers=[{name:'James W.',prod:'Cool Mist Humidifier 4L',order:'112-8834',date:'6 天前',tag:'review'},{name:'Sofia M.',prod:'Aroma Diffuser 500ml',order:'114-2201',date:'9 天前',tag:'review'},{name:'Liam K.',prod:'Sunset Projection Lamp',order:'113-5567',date:'2 天前',tag:'repeat'},{name:'Emma T.',prod:'Cool Mist Humidifier 4L',order:'112-9910',date:'16 天前',tag:'review'},{name:'Noah B.',prod:'Aroma Diffuser 500ml',order:'115-3345',date:'1 天前',tag:'repeat'}];
+  let customers=[];
   const templates=[
     {id:'ship',name:'发货 / 物流关怀',ico:'M3 7h13v10H3zM16 10h4l1 3v4h-5',desc:'订单送达后确认使用体验',subj:'Your {{商品}} is on the way',body:'Hi {{客户名}},\n\nThanks for your order {{订单号}}! Your {{商品}} has shipped. If anything isn\'t perfect, just reply here.\n\nBest,\nAurora Home'},
     {id:'review',name:'关怀式催评',ico:'M12 2l3 7 7 .5-5.5 4.5 2 7-6.5-4-6.5 4 2-7L2 9.5 9 9z',desc:'满 14 天且无评价（合规口径）',subj:'How is your {{商品}} working out?',body:'Hi {{客户名}},\n\nIt\'s been a couple of weeks since your {{商品}} (order {{订单号}}) arrived. We\'d love to know how it\'s working for you.\n\nWarm regards,\nAurora Home'},
@@ -1038,9 +1352,21 @@ button.imgbox{font-family:inherit}
   ];
   let curTmpl='review',custFilter='all';
   const selCount=()=>$$('#custTbl .cust:checked').length;
-  function renderCust(){const tb=$('#custTbl');[...tb.querySelectorAll('tr:not(:first-child)')].forEach(r=>r.remove());
-    customers.filter(c=>custFilter==='all'||c.tag===custFilter).forEach(c=>{const tr=tb.insertRow(-1);
-      tr.innerHTML=`<td><input type="checkbox" class="cust" checked></td><td><b>${c.name}</b></td><td style="color:var(--dim)">${c.prod}</td><td class="mono">${c.order}</td><td class="tnum" style="color:var(--dim)">${c.date}</td><td>${c.tag==='review'?'<span class="pill warn">待催评</span>':'<span class="pill accent">复购</span>'}</td>`;
+  async function loadCustomers(){
+    try{
+      const r=await fetch('/api/customers');if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();customers=d.items||[];
+      updateCustomerTabs(d.counts||{all:0,repeat:0,review:0});renderCust(d.error);
+    }catch(e){customers=[];updateCustomerTabs({all:0,repeat:0,review:0});renderCust('客户数据加载失败：'+String(e.message||e));}
+  }
+  function updateCustomerTabs(counts){$$('#custFilters .tab').forEach(t=>{
+    const f=t.dataset.f;t.textContent=(f==='all'?'全部':f==='repeat'?'复购':'待催评')+' '+(counts[f]||0);
+  });}
+  function renderCust(errorMsg=''){const tb=$('#custTbl');[...tb.querySelectorAll('tr:not(:first-child)')].forEach(r=>r.remove());
+    const list=customers.filter(c=>custFilter==='all'||c.tag===custFilter);
+    if(!list.length){const tr=tb.insertRow(-1);tr.innerHTML=`<td colspan="6" style="text-align:center;color:var(--dim);padding:22px">${esc(errorMsg||'暂无客户数据。请先在「数据导入」上传真实订单报表。')}</td>`;updCount();return;}
+    list.forEach(c=>{const tr=tb.insertRow(-1);
+      tr.innerHTML=`<td><input type="checkbox" class="cust" checked></td><td><b>${esc(c.name)}</b></td><td style="color:var(--dim)">${esc(c.prod)}</td><td class="mono">${esc(c.order)}</td><td class="tnum" style="color:var(--dim)">${esc(c.date)}</td><td>${c.tag==='review'?'<span class="pill warn">待跟进</span>':'<span class="pill accent">复购</span>'}</td>`;
       tr.querySelector('.cust').onchange=updCount;});updCount();}
   function updCount(){$('#sendCount').textContent=selCount();}
   function renderTmpl(){const w=$('#tmplList');w.innerHTML='';templates.forEach(t=>{const b=document.createElement('button');b.className='tmpl'+(t.id===curTmpl?' active':'');
@@ -1050,18 +1376,20 @@ button.imgbox{font-family:inherit}
     $('#mailPreview').innerHTML='<div class="subj">'+hl(t.subj)+'</div>'+hl(t.body).replace(/\n/g,'<br>');}
   $$('#custFilters .tab').forEach(t=>t.onclick=()=>{$$('#custFilters .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');custFilter=t.dataset.f;renderCust();});
   $('#custAll').onchange=e=>{$$('#custTbl .cust').forEach(c=>c.checked=e.target.checked);updCount();};
-  $('#sendMail').onclick=()=>{const n=selCount();if(!n){toast('请先选择买家');return;}toast('已发送 '+n+' 封跟踪邮件');};
+  $('#sendMail').onclick=()=>toast('尚未配置 Buyer-Seller Messaging API，不会模拟发送');
 
   /* ---------- init ---------- */
-  renderStores();loadOpps();renderPlist();renderDetail(0);renderCust();renderTmpl();renderPreview();
+  renderStores();loadChatSessions();loadOpps();loadOptimize();loadCustomers();renderTmpl();renderPreview();
+  fetch('/api/stores').then(r=>r.json()).then(d=>{if(d.items&&d.items.length){stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));curStore=stores[0].id;syncStore();loadChatSessions(true);loadOpps();loadOptimize();loadCustomers();}}).catch(()=>{});
 
   /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
   (function initBackend(){
     const sel=$('#agentSel');
     fetch('/api/agents').then(r=>r.json()).then(list=>{
-      list.forEach(a=>{AGENT_CN[a.key]=a.label;
+      list.forEach(a=>{AGENT_CN[a.key]=a.key==='selection'?'机会上新':a.label;
         if(sel&&a.key!=='default'){const o=document.createElement('option');
-          o.value=a.key;o.textContent=a.label;o.title=a.desc||'';sel.appendChild(o);}});
+          o.value=a.key;o.textContent=a.key==='selection'?'机会上新':a.label;o.title=a.desc||'';sel.appendChild(o);}});
+      renderAgentNav(list);
     }).catch(()=>{});
     fetch('/api/info').then(r=>r.json()).then(d=>{
       const eng=d.provider==='mock'?'mock（未接真实模型）':(d.provider+' · '+d.model);

@@ -1,0 +1,10 @@
+﻿开始日期,结束日期,广告组合名称,货币,广告活动名称,广告组名称,零售商,国家/地区,投放,匹配类型,客户搜索词,展示量,点击量,点击率 (CTR),单次点击成本 (CPC),花费,7天总销售额,广告投入产出比 (ACOS) 总计,总广告投资回报率 (ROAS),7天总订单数(#),7天总销售量(#),7天的转化率,7天内广告SKU销售量(#),7天内其他SKU销售量(#),7天内广告SKU销售额,7天内其他SKU销售额
+2026-06-01,2026-06-01,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,solar torch lights outdoor,420,12,0.0286,0.8,9.6,95.97,0.1,10.0,2,2,0.1667,2,0,95.97,0
+2026-06-02,2026-06-02,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,solar torch lights outdoor,505,10,0.0198,0.82,8.2,63.98,0.1282,7.8,2,2,0.2,2,0,63.98,0
+2026-06-03,2026-06-03,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,solar torch lights outdoor,388,8,0.0206,0.86,6.9,63.98,0.1078,9.27,2,2,0.25,2,0,63.98,0
+2026-06-02,2026-06-02,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,flickering flame torch garden waterproof,60,4,0.0667,0.78,3.1,31.99,0.0969,10.32,1,1,0.25,1,0,31.99,0
+2026-06-01,2026-06-01,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,christmas lights indoor,800,9,0.0112,0.82,7.4,0,,0,0,0,0.0,0,0,0,0
+2026-06-02,2026-06-02,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,christmas lights indoor,760,9,0.0118,0.87,7.8,0,,0,0,0,0.0,0,0,0,0
+2026-06-03,2026-06-03,No Portfolio,USD,样例-灯串自动,样例-灯串自动,Amazon,美国,loose-match,-,solar string lights,300,25,0.0833,0.86,21.5,17.99,1.1951,0.84,1,1,0.04,1,0,17.99,0
+2026-06-03,2026-06-03,No Portfolio,USD,样例-火把手动广泛,样例-火把手动广泛,Amazon,美国,solar torch light,BROAD,tiki torch replacement canister,30,1,0.0333,0.8,0.8,0,,0,0,0,0.0,0,0,0,0
+2026-06-01,2026-06-01,No Portfolio,USD,样例-灯串自动,样例-灯串自动,Amazon,美国,loose-match,-,outdoor string lights waterproof,350,15,0.0429,0.7,10.5,87.96,0.1194,8.38,4,4,0.2667,4,0,87.96,0
