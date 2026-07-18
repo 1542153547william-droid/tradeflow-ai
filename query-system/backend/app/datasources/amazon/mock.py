@@ -149,6 +149,7 @@ class MockSource(DataSource):
         )
         await self.fetch_detail(product, marketplace)      # 变体/rank/content/logistics
         product.reviews_sample = await self.fetch_reviews(product_id, marketplace)
+        product.reviews_status = "ok"  # mock 确定性生成，不会失败
         return product
 
     async def fetch_detail(self, product: Product, marketplace: str) -> None:
@@ -177,6 +178,7 @@ class MockSource(DataSource):
             variant_attributes={"Color": rng.choice(["Black", "White", "Blue"]),
                                 "Size": rng.choice(["S", "M", "L"])},
         )
+        product.detail_status = "ok"  # mock 确定性生成，不会失败
 
     async def fetch_reviews(
         self, product_id: str, marketplace: str, limit: int = 40
