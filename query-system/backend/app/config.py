@@ -7,6 +7,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +37,14 @@ class Settings(BaseSettings):
     scraper_min_delay: float = 1.5  # 每次请求最小随机延时（秒）
     scraper_max_delay: float = 4.0
     scraper_timeout_ms: int = 30000
+    # context.close()/browser.close()/pw.stop() 这几个调用没有内置超时保护：正常
+    # 情况下是纯本机 IPC（不涉及网络）。实测过两组：15 轮空白页 p50≈60ms/max≈85ms；
+    # 5 轮真实 Amazon 列表页/详情页（大图/A+内容/评论区，~5000-8800 DOM 节点）
+    # max≈113ms——数据量大确实会变慢，但幅度不大（约 1.5~2 倍），量级还是毫秒级。
+    # 一次搜索（top_n 个商品 × 详情/评论/QA 各开一次 context）最多可能触发几十次
+    # close，每次都按超时上限等的话会累加，所以没有直接套「60 倍冗余」给 5 秒，
+    # 而是收紧到约 15 倍冗余：单次泄漏的影响可控，累计上限也不会失控到几分钟。
+    scraper_close_timeout_s: float = Field(default=1.5, gt=0)
     scraper_headless: bool = True
     # 进商品详情页抓准确品牌（更慢、更易触发反爬，可关）
     scraper_fetch_brand: bool = True
@@ -47,6 +56,12 @@ class Settings(BaseSettings):
     # 代理池：逗号分隔的多个代理，抓取时轮换，进一步分散风控。留空则退回单个
     # scraper_proxy；两者都空 = 直连。机房 IP 抓 Amazon 极易被限，强烈建议配住宅代理池。
     scraper_proxies: str = ""
+    # 爬虫通道全局并发上限：同一时刻最多几个搜索请求可以同时用 scraper 通道
+    # （每个请求会各自起一个 Chromium）。_enrich 里对同一次搜索已做串行+延时，
+    # 但不同搜索请求之间原本互不限制，并发一高就会同时起多个浏览器打 Amazon，
+    # 违背降封号的设计意图。默认 1 = 全局串行；配了代理池可以调大。
+    # ge=1：0 会让 Semaphore 永远拿不到许可（死锁），负数会在创建 Semaphore 时报错。
+    scraper_max_concurrency: int = Field(default=1, ge=1)
 
     # ---- 通用 ----
     default_platform: str = "amazon"     # 未指定 platform 时的默认平台

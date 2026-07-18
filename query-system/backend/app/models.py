@@ -22,6 +22,10 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+# 抓取步骤状态：not_fetched=未请求 / ok=成功(含确实为空) / blocked=被拦截 /
+# timeout=超时 / error=其它异常。detail_status/reviews_status/qa_status 共用。
+STATUS_LITERAL = Literal["not_fetched", "ok", "blocked", "timeout", "error"]
+
 
 # ---- 列表页上下文 ----
 class SearchContext(BaseModel):
@@ -146,10 +150,13 @@ class Product(BaseModel):
     content: Content = Field(default_factory=Content)
     reviews_sample: List[Review] = Field(default_factory=list)
     qa_sample: List[QA] = Field(default_factory=list)
-    # 详情抓取状态：区分“字段为空是因为被拦截/超时”还是“确实没有”。
-    #   not_fetched=未抓详情（仅列表数据）  ok=详情抓取成功
-    #   blocked=被平台拦截(验证码/机器人页)  timeout=打开详情页超时  error=其它异常
-    detail_status: Literal["not_fetched", "ok", "blocked", "timeout", "error"] = "not_fetched"
+    # 各富化步骤的抓取状态：区分字段/列表为空是因为被拦截/超时，还是确实没有。
+    #   not_fetched=未请求该步骤  ok=抓取成功（可能确实是 0 条）
+    #   blocked=被平台拦截(验证码/机器人页)  timeout=打开页面超时  error=其它异常
+    # 模型/前端应基于这些字段提示用户数据不完整，而不是把抓取失败当成该商品没有评论。
+    detail_status: STATUS_LITERAL = "not_fetched"
+    reviews_status: STATUS_LITERAL = "not_fetched"
+    qa_status: STATUS_LITERAL = "not_fetched"
 
 
 class SearchResult(BaseModel):

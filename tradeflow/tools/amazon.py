@@ -61,6 +61,18 @@ def search_products(keyword: str, platform: str = "amazon", top_n: int = 10,
     对全部评论的情感分析(正/中/负占比)与高频关键词。平台专属字段在
     base_info.platform_extra。用于市场分析、竞品拆解、选品判断。top_n 范围 1-20。
 
+    detail_status/reviews_status/qa_status：标记对应字段是"确实没有"还是"抓取失败/被拦截
+    (blocked/timeout/error)"。这三个字段非 "ok"/"not_fetched" 时，必须在回答里如实告知用户
+    对应数据可能不完整（比如"该商品评论抓取被拦截，以下分析基于列表页信息，可能不准确"），
+    不能把抓取失败悄悄当成"该商品没有评论/详情"来分析或下结论。
+
+    base_info.platform_extra.review_ai_summary（仅 Amazon）：Amazon 官方对该商品全部
+    评论生成的一段综合性文字摘要（不是逐条评论，无法归属到具体某条评论/评分/日期）。
+    当 reviews_status 不是 "ok"（尤其是抓取失败导致 reviews_sample 为空）而这个字段
+    有值时，**应该用它来补充做竞品/口碑分析**，但必须向用户说明这是"Amazon 官方摘要"
+    而不是"抽样到的具体评论"，两者不能混为一谈、不能编造成"根据用户评论 xxx 反馈…"
+    这种暗示读过具体评论原文的措辞。
+
     include_reviews：是否逐个抓取每个商品的评论正文做情感分析。默认 False——
     列表页已含 品牌/价格/评分/评论数/排名，足够做「竞品格局/选品」，且**快得多**
     （爬虫模式下开 True 会对每个商品再单独开页，单次查询可能慢到几分钟）。
@@ -113,7 +125,14 @@ def get_product_by_asin(asin: str, platform: str = "amazon",
 
     用于 #5 爆款拆解 / #7 选品：输入单个 ASIN，返回该产品的通用分层结构
     base_info(品牌/标题/评分/评论数/排名)、pricing、logistics、content(卖点/变体)、
-    reviews_sample 及整体评论情感/关键词分析。platform 用 list_platforms 查可选值。"""
+    reviews_sample 及整体评论情感/关键词分析。platform 用 list_platforms 查可选值。
+
+    detail_status/reviews_status/qa_status 非 "ok"/"not_fetched" 时必须如实告知用户
+    数据可能不完整，不能当成"该商品确实没有"。reviews_status 抓取失败、reviews_sample
+    为空时，检查 base_info.platform_extra.review_ai_summary（仅 Amazon）——这是官方对
+    全部评论生成的综合摘要，不是逐条评论，可以用来补充口碑分析，但要向用户说明这是
+    "官方摘要"而非"抽样评论"，不能说成"根据用户评论 xxx 反馈…"这种暗示读过评论原文
+    的措辞。"""
     try:
         import httpx  # 惰性导入，见文件头说明
     except ImportError:

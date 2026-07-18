@@ -6,6 +6,7 @@ Rainforest / SerpApi / Apify 等提供合规的 Amazon 数据接口。
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 import httpx
@@ -21,12 +22,16 @@ from ...models import (
     Review,
     SearchContext,
 )
-from ..base import DataSource, DataSourceError
+from ..base import VALID_STATUSES, DataSource, DataSourceError
+
+
+_REDACT_API_KEY = re.compile(r"(api_key=)[^&\s'\"]*")
 
 
 class ApiSource(DataSource):
     name = "api"
     platform = "amazon"
+    supports_qa = False  # Rainforest 等第三方 API 不提供问答，走这里从没真正请求过
 
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -71,9 +76,18 @@ class ApiSource(DataSource):
         }
         try:
             data = await self._request(params)
-        except DataSourceError:
+        except DataSourceError as exc:
+            # 跟 ScraperSource.fetch_detail 对齐：失败也要写状态，不能让详情失败
+            # 在换成 API 通道时又变回"静默不完整"；沿用 _request 分好的 status
+            # （比如 timeout），不能笼统写死成 error 把这个分类信息丢掉。
+            product.detail_status = exc.status if exc.status in VALID_STATUSES else "error"
             return
-        p = data.get("product", {}) or {}
+        p = data.get("product") or {}
+        if not p:
+            # HTTP 200 但业务报错/无此商品（供应商常见做法：额度耗尽、无结果等也回 200）。
+            # 不能因为字段都是空的就当成"抓取成功、这商品本来就没这些信息"。
+            product.detail_status = "error"
+            return
         ranks = p.get("bestsellers_rank", []) or []
         if ranks:
             product.base_info.rank = _to_int(ranks[0].get("rank"))
@@ -97,6 +111,7 @@ class ApiSource(DataSource):
             has_video=bool(p.get("videos")),
             child_id=p.get("asin"),
         )
+        product.detail_status = "ok"
 
     async def fetch_reviews(
         self, product_id: str, marketplace: str, limit: int = 40
@@ -107,10 +122,13 @@ class ApiSource(DataSource):
             "amazon_domain": marketplace,
             "asin": product_id,
         }
-        try:
-            data = await self._request(params)
-        except DataSourceError:
-            return []
+        # 不再吞掉 DataSourceError：让它冒泡给 _enrich，写进 Product.reviews_status，
+        # 而不是让"API 请求失败"和"这个商品确实没有评论"看起来一样。
+        data = await self._request(params)
+        if "reviews" not in data:
+            # HTTP 200 但响应体里压根没有 reviews 字段：多半是业务错误/额度耗尽，
+            # 不是"这个商品确实没有评论"（那种情况供应商通常返回 reviews: []）。
+            raise DataSourceError(f"API 响应缺少 reviews 字段 id={product_id}")
         out: List[Review] = []
         for r in data.get("reviews", [])[:limit]:
             date = r.get("date")
@@ -136,8 +154,13 @@ class ApiSource(DataSource):
                 resp = await client.get(self.settings.api_base_url, params=params)
                 resp.raise_for_status()
                 return resp.json()
+        except httpx.TimeoutException as exc:
+            raise DataSourceError(f"API 请求超时: {type(exc).__name__}", status="timeout") from exc
         except (httpx.HTTPError, ValueError) as exc:  # 网络/解析错误
-            raise DataSourceError(f"API 请求失败: {exc}") from exc
+            # httpx 的异常文本（尤其 HTTPStatusError）常把完整请求 URL 拼进去，而
+            # params 里带着 api_key 查询参数——脱敏后再往外抛/记日志，避免把密钥写进日志。
+            raise DataSourceError(
+                f"API 请求失败: {_REDACT_API_KEY.sub(r'\1***', str(exc))}") from exc
 
     @staticmethod
     def _map_product(keyword: str, organic_rank, sponsored_rank, r: Dict[str, Any]) -> Product:

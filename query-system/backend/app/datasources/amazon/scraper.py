@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import random
 import re
@@ -37,6 +38,13 @@ from ...models import (
 from ..base import DataSource, DataSourceError
 
 logger = logging.getLogger(__name__)
+
+# 代理池轮换游标：跨所有 ScraperSource 实例共享（模块级，进程内全局）。每次搜索
+# 请求都会 new 一个 ScraperSource，如果游标是实例私有、各自从 0 开始，
+# scraper_max_concurrency>1 时并发请求会同时命中代理池的同一个出口 IP，
+# 完全违背"配代理池就能调大并发"的初衷。用 itertools.count() 保证全局递增；
+# 这里只要"大体分散、不系统性撞车"，不需要真正的锁（GIL 下 next() 本身是原子的）。
+_PROXY_CURSOR = itertools.count()
 
 # 调试用：抓取被拦/解析为空时自动截图，落到 backend/debug_shots/（已 gitignore）。
 # 调好后想关掉把这里改成 False 即可。
@@ -135,13 +143,13 @@ def _parse_weight_lbs(text: str) -> Optional[float]:
 class ScraperSource(DataSource):
     name = "scraper"
     platform = "amazon"
+    supports_qa = True  # fetch_qa 有真实实现（见下），不是基类的空占位
 
     def __init__(self, settings: Settings):
         self.settings = settings
         self._browser = None
         self._pw = None
         self._launch_lock = asyncio.Lock()
-        self._proxy_i = 0  # 代理池轮换游标
 
     async def _ensure_browser(self):
         if self._browser is not None:
@@ -178,10 +186,11 @@ class ScraperSource(DataSource):
             extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
         )
         # 代理池轮换：每开一个 context 换一个出口 IP，分散 Amazon 的 IP 风控。
+        # 用模块级共享游标（_PROXY_CURSOR），不是每个 ScraperSource 实例私有从 0
+        # 开始——否则并发的多个搜索请求会同时从 pool[0] 起步，集中撞同一个代理。
         pool = self.settings.proxy_pool()
         if pool:
-            server = pool[self._proxy_i % len(pool)]
-            self._proxy_i += 1
+            server = pool[next(_PROXY_CURSOR) % len(pool)]
             ctx_kwargs["proxy"] = {"server": server}
         context = await self._browser.new_context(**ctx_kwargs)
         await context.add_init_script(_STEALTH_JS)
@@ -201,6 +210,31 @@ class ScraperSource(DataSource):
         await asyncio.sleep(
             random.uniform(self.settings.scraper_min_delay, self.settings.scraper_max_delay)
         )
+
+    async def _safe_close(self, coro, label: str) -> None:
+        """给 context.close()/browser.close()/pw.stop() 加超时保护。
+
+        这几个调用没有内置超时：正常是纯本机 IPC，实测（见开发记录）几十到一百多
+        毫秒内完成；但浏览器子进程变僵尸时可能真的挂住不返回，而它们都在 finally
+        里，一卡住就会让信号量永远还不回去（见 scraper_max_concurrency）。
+
+        不用裸 `asyncio.wait_for(coro, timeout=...)`：它超时后会取消 coro 并等待
+        取消完成，如果 coro 内部吞掉了 CancelledError 或卡在不可取消的操作上，
+        等价于没设超时。这里用 asyncio.shield 让被等待的任务在超时后继续在后台
+        自己收尾（我们不再等它），保证本函数本身一定在超时时间内返回；
+        add_done_callback 只是为了不让"任务的异常/取消结果从未被取走"触发解释器
+        警告，不代表我们还在关心它的结果。
+        """
+        task = asyncio.ensure_future(coro)
+        task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=self.settings.scraper_close_timeout_s)
+        except asyncio.TimeoutError:
+            logger.warning("%s 超过 %.1fs 未返回，放弃等待（可能残留僵尸进程，"
+                           "已在后台脱钩继续跑，不再阻塞当前请求）",
+                           label, self.settings.scraper_close_timeout_s)
+        except Exception as exc:
+            logger.debug("%s 失败: %s", label, exc)
 
     async def _debug_shot(self, page, tag: str) -> None:
         """抓取异常时存一张整页截图，便于事后判断是验证码/布局变化/空页。失败静默。"""
@@ -319,7 +353,7 @@ class ScraperSource(DataSource):
                 await self._debug_shot(page, "empty")
                 raise DataSourceError("未解析到任何产品（页面结构可能变化或被拦截）")
         finally:
-            await context.close()
+            await self._safe_close(context.close(), "context.close")
         return products
 
     # ============ 详情页 ============
@@ -373,16 +407,25 @@ class ScraperSource(DataSource):
                 child_id=pid,
                 variant_attributes=await self._variants(page),
             )
-            # 评论：/product-reviews 页需登录，改从详情页内嵌的 "Top reviews" 抓
+            # 评论：/product-reviews 页需登录；详情页内嵌的逐条 "Top reviews" 现在
+            # 也已经不可靠了（评论区改版成 AJAX 评分汇总组件，不再含单条评论文本，
+            # 见 fetch_reviews 的 docstring），这里仍然尝试抓，抓不到就是空列表，
+            # reviews_status 会在 _enrich 里用 review_count 交叉验证识别出来。
             product.reviews_sample = await self._extract_reviews(
                 page, pid, self.settings.review_sample_size)
+            # "Customers say" AI 摘要：评论区改版后唯一还公开可见的评论相关文字，
+            # 不是逐条评论（无法归属到具体某条评论/评分/日期），跟 reviews_sample
+            # 分开存进 platform_extra，不污染逐条评论的语义。
+            summary = await self._ai_review_summary(page)
+            if summary:
+                product.base_info.platform_extra["review_ai_summary"] = summary
             product.detail_status = "ok"
         except Exception as exc:
             # 区分“打开详情页超时”与其它异常，便于下游/模型判断空字段的成因。
             product.detail_status = "timeout" if "Timeout" in type(exc).__name__ or "Timeout" in str(exc) else "error"
             logger.warning("抓取详情失败 id=%s: %s", pid, exc)
         finally:
-            await context.close()
+            await self._safe_close(context.close(), "context.close")
 
     # ============ 评论 ============
     async def fetch_reviews(
@@ -390,8 +433,21 @@ class ScraperSource(DataSource):
     ) -> List[Review]:
         """独立抓评论（当未开启 include_detail 时用）。
 
-        注意：Amazon 的 /product-reviews 页现已需登录，故改从详情页 /dp 内嵌的
-        "Top reviews" 抓取（通常 8-10 条，无需登录）。
+        已知限制（2026-07-19 用真实商品验证过，非猜测）：Amazon 详情页 /dp 的评论区
+        已经从"内嵌完整评论卡片"改成了 AJAX 组件（触发方式：把 #reviewsMedley 滚进
+        可视区域），但滚动触发后组件里只渲染出评分汇总/星级分布直方图，不再包含单条
+        评论文本；旧代码依赖的 div[data-hook='review'] 选择器已经找不到东西。单条评论
+        原文的两个入口——经典的 /product-reviews/{asin} 和详情页里链接指向的
+        /portal/customer-reviews/{asin}——都会跳转到 Amazon 登录页。也就是说不登录的
+        情况下，这条链路目前只能拿到 review_count 这类公开聚合数据，拿不到评论原文，
+        不是选择器过期这种小修小补能解决的。SearchService._enrich 里已经用
+        review_count 交叉验证识别这种"有评论数却一条没抓到"的情况、标成 reviews_status
+        =error，不会误报成"该商品没有评论"，但 reviews_sample 本身目前预期就是空的。
+        （不确定是不是所有商品/站点都这样，可能是分品类/账号维度的 A/B 测试。）
+
+        失败时抛 DataSourceError（带 status 分类）而不是静默返回 []：让上层
+        （SearchService._enrich）能区分"抓取失败"和"这个商品确实没有评论"，
+        写进 Product.reviews_status 返回给调用方。
         """
         context, page = await self._new_page(marketplace)
         try:
@@ -399,13 +455,16 @@ class ScraperSource(DataSource):
             await page.goto(url, timeout=self.settings.scraper_timeout_ms, wait_until="domcontentloaded")
             await self._throttle()
             if await self._is_blocked(page):
-                return []
+                raise DataSourceError(f"抓取评论被拦截 id={product_id}", status="blocked")
             return await self._extract_reviews(page, product_id, limit)
+        except DataSourceError:
+            raise
         except Exception as exc:
+            status = "timeout" if "Timeout" in type(exc).__name__ or "Timeout" in str(exc) else "error"
             logger.warning("抓取评论失败 id=%s: %s", product_id, exc)
-            return []
+            raise DataSourceError(f"抓取评论失败 id={product_id}: {exc}", status=status) from exc
         finally:
-            await context.close()
+            await self._safe_close(context.close(), "context.close")
 
     async def _extract_reviews(self, page, product_id: str, limit: int) -> List[Review]:
         """从当前页面（详情页/评论页均可）解析 div[data-hook='review']。
@@ -445,15 +504,68 @@ class ScraperSource(DataSource):
             ))
         return out
 
+    async def _ai_review_summary(self, page) -> Optional[str]:
+        """抓 "Customers say" —— Amazon 把该商品全部评论喂给模型生成的一段综合
+        描述。评论区改版成 AJAX 汇总组件后（见 fetch_reviews docstring），这是
+        目前详情页上唯一还公开可见、跟评论内容相关的文字，不用登录就能看到。
+
+        注意这不是逐条评论：无法归属到具体某条评论/评分/日期，跟 reviews_sample
+        是两种不同形状的数据，调用方（_enrich）把它单独存进
+        product.base_info.platform_extra["review_ai_summary"]，不混进逐条评论列表。
+
+        选择器说明：这块容器的 class 全是构建期生成的哈希（如 __P0nNOOvptgdu），
+        没有 id/data-hook 可用，只能靠标题文案 "Customers say" 精确定位，取其
+        celwidget 祖先容器（Amazon 页面通用的组件外壳类）的全部文本、去掉标题
+        本身那一行。这块选择器天然比 data-hook 脆弱——文案本地化/AB 测试都可能
+        让它失效，抓不到就返回 None，不算失败（不抛错、不影响 detail_status）。
+        """
+        try:
+            heading = await page.query_selector("h3:text-is('Customers say')")
+            if not heading:
+                return None
+            text = await heading.evaluate("""
+                (h3) => {
+                  let el = h3;
+                  for (let i = 0; i < 6 && el.parentElement; i++) {
+                    el = el.parentElement;
+                    if (el.classList && el.classList.contains('celwidget')) break;
+                  }
+                  return el.innerText || '';
+                }
+            """)
+            # 容器整段文本第一行是标题本身，第二行才是摘要正文（单独一段，内部无
+            # 换行）；再往后是 "AI Generated from the text of customer reviews" 之类
+            # 界面免责声明、"Select to learn more"、以及 Quality/Durability 这类方面
+            # 标签+提及次数——只取摘要正文这一行，不把界面文案和标签也拽进来。
+            lines = [ln.strip() for ln in (text or "").split("\n") if ln.strip()]
+            summary = lines[1] if len(lines) > 1 else ""
+            return summary[:1500] or None  # 截断，跟 rich_content 一致，避免占太多 token
+        except Exception as exc:
+            logger.debug("抓取 Customers say 摘要失败/该商品无此摘要: %s", exc)
+            return None
+
     # ============ 问答（多数已下线，尽力而为）============
     async def fetch_qa(self, product_id: str, marketplace: str, limit: int = 10) -> List[QA]:
-        context, page = await self._new_page(marketplace)
+        """抓买家问答。
+
+        Amazon 问答功能多数已下线，绝大多数商品打开问答页本来就没有问答区块——这
+        是常态，不是失败，所以"页面正常打开、解析不到问答"仍静默返回 []（不升级
+        成 error，否则几乎每个商品都会被误标成"问答抓取失败"）。但"页面压根没打开
+        （导航超时/网络错误）"跟"打开了但没内容"是两码事，前者是有意义的失败信号，
+        跟反爬拦截（_is_blocked）一样值得抛出来，不能也归进"静默无问答"。
+        """
+        context = None
         try:
+            context, page = await self._new_page(marketplace)
             url = f"https://www.{marketplace}/ask/questions/asin/{product_id}"
-            await page.goto(url, timeout=self.settings.scraper_timeout_ms, wait_until="domcontentloaded")
+            try:
+                await page.goto(url, timeout=self.settings.scraper_timeout_ms, wait_until="domcontentloaded")
+            except Exception as exc:
+                status = "timeout" if "Timeout" in type(exc).__name__ or "Timeout" in str(exc) else "error"
+                raise DataSourceError(f"打开问答页失败 id={product_id}: {exc}", status=status) from exc
             await self._throttle()
             if await self._is_blocked(page):
-                return []
+                raise DataSourceError(f"抓取问答被拦截 id={product_id}", status="blocked")
             out: List[QA] = []
             for blk in await page.query_selector_all("div.a-section.askTeaserQuestions > div"):
                 if len(out) >= limit:
@@ -465,11 +577,18 @@ class ScraperSource(DataSource):
                     continue
                 out.append(QA(question_text=texts[0], answer_text=texts[1] if len(texts) > 1 else None))
             return out
+        except DataSourceError as exc:
+            if exc.status in ("blocked", "timeout"):
+                raise
+            # 浏览器/context 初始化失败等其它非拦截类异常，按设计意图静默处理。
+            logger.debug("抓取问答失败/无问答 id=%s: %s", product_id, exc)
+            return []
         except Exception as exc:
             logger.debug("抓取问答失败/无问答 id=%s: %s", product_id, exc)
             return []
         finally:
-            await context.close()
+            if context is not None:
+                await self._safe_close(context.close(), "context.close")
 
     # ---- 列表页解析辅助 ----
     async def _attr(self, root, selector: str, attr: str) -> Optional[str]:
@@ -659,7 +778,16 @@ class ScraperSource(DataSource):
         return m.group(1) if m else None
 
     async def _bsr_text(self, page) -> str:
-        """把可能含 BSR 的几个容器文本拼起来；找不到再回退到整页文本。"""
+        """把可能含 BSR 的几个容器文本拼起来；找不到再回退到整页文本。
+
+        用 textContent 而不是 inner_text()：Amazon 现在常把这块信息收进默认折叠
+        的可展开区块（class 里带 "a-expander-content"），inner_text() 只返回
+        "当前视觉可见"的文本，折叠状态下会跳过这块内容，导致明明 DOM 里有数据却
+        读不到。textContent 不管可见性，直接读 DOM 原始文本；这几个容器范围窄
+        （具体的详情表格 id），不会像整页 textContent 那样把 <script>/<style>
+        标签内容也带进来，风险可控。整页兜底那步保留 inner_text（body 范围大，
+        用 textContent 混进脚本内容的风险更高）。
+        """
         parts: List[str] = []
         for sel in ["#productDetails_detailBullets_sections1",
                     "#productDetails_db_sections",
@@ -668,7 +796,7 @@ class ScraperSource(DataSource):
                     "#prodDetails", "#SalesRank"]:
             el = await page.query_selector(sel)
             if el:
-                parts.append(await el.inner_text())
+                parts.append(await el.evaluate("el => el.textContent || ''"))
         text = "\n".join(parts)
         if "Best Sellers Rank" not in text and "Seller Rank" not in text:
             try:  # BSR 位置多变，整页文本兜底
@@ -686,9 +814,17 @@ class ScraperSource(DataSource):
         matches = re.findall(r"#\s*([\d,]+)\s+in\s+([^(#\n]+)", seg)
         if not matches:
             return None, None, []
+
+        def _clean_node(raw: str) -> str:
+            # _bsr_text 现在用 textContent（见其注释）而不是 inner_text()：不同
+            # 表格行/单元格之间不再有换行分隔，类目名后面常直接接上下一行的文字
+            # （如 "ASIN"/"Customer Reviews" 这些标签）。两个连续空格在源 HTML 里
+            # 通常就是相邻单元格的分界，用它切一刀，取类目名本身那一段。
+            return re.split(r"\s{2,}", raw.strip(), maxsplit=1)[0].strip()
+
         main_rank = int(matches[0][0].replace(",", ""))
-        main_node = matches[0][1].strip()
-        subs = [RankNode(node=n.strip(), rank=int(r.replace(",", "")))
+        main_node = _clean_node(matches[0][1])
+        subs = [RankNode(node=_clean_node(n), rank=int(r.replace(",", "")))
                 for r, n in matches[1:]]
         return main_rank, main_node, subs
 
@@ -806,8 +942,8 @@ class ScraperSource(DataSource):
 
     async def close(self) -> None:
         if self._browser:
-            await self._browser.close()
+            await self._safe_close(self._browser.close(), "browser.close")
             self._browser = None
         if self._pw:
-            await self._pw.stop()
+            await self._safe_close(self._pw.stop(), "pw.stop")
             self._pw = None
