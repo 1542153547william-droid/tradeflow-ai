@@ -31,8 +31,10 @@ class Settings:
     # "mock" until keys/params are wired; flip to "anthropic" to go live.
     provider: str = os.environ.get("TRADEFLOW_PROVIDER", "mock")
     api_token: Optional[str] = os.environ.get("TRADEFLOW_API_TOKEN")
-    basic_auth_user: Optional[str] = os.environ.get("TRADEFLOW_BASIC_USER")
-    basic_auth_password: Optional[str] = os.environ.get("TRADEFLOW_BASIC_PASSWORD")
+    # Cookie session login (web/auth.py).
+    session_cookie_name: str = os.environ.get("TRADEFLOW_SESSION_COOKIE", "tf_session")
+    session_ttl_days: int = int(os.environ.get("TRADEFLOW_SESSION_TTL_DAYS", "30"))
+    secure_cookies: bool = os.environ.get("TRADEFLOW_SECURE_COOKIES", "1") != "0"
     # 商品查询系统（独立 HTTP 服务，不是 amazon.com）的地址，供 tools/amazon.py 调用。
     query_api_url: str = os.environ.get("QUERY_API_URL", "http://127.0.0.1:8000")
     # Alibaba Bailian / DashScope (Qwen) — OpenAI-compatible, works from mainland.

@@ -17,13 +17,11 @@ from typing import Any, Dict, List
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import asyncio  # noqa: E402
-import base64  # noqa: E402
-import hmac  # noqa: E402
 import json  # noqa: E402
 import threading  # noqa: E402
 import uuid  # noqa: E402
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile  # noqa: E402
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
@@ -35,7 +33,7 @@ from tradeflow.compose import compose_system_prompt  # noqa: E402
 from tradeflow.factory import build_agent  # noqa: E402
 from tradeflow.llm.base import Message, Role  # noqa: E402
 from tradeflow.tools.compliance import compliance_gate  # noqa: E402
-from web import store  # noqa: E402
+from web import accounts, auth, store  # noqa: E402
 from web.import_tools import build_import_tools  # noqa: E402
 from web.listing_gen import generate_listing  # noqa: E402
 from web.opp_suggest import suggest_opportunities  # noqa: E402
@@ -55,41 +53,117 @@ def startup() -> None:
     init_db()
 
 
+# 除登录/登出接口本身外，所有 /api/* 都要求带有效 session cookie；未登录统一 401。
+# 登出也豁免：cookie 已失效时也要能把浏览器那份 cookie 清掉，不能被这道门禁挡在 handler 之外。
+# 兜底门禁：即便某个 handler 忘记加 Depends(auth.current_user)，这里也会先拦下来。
+_PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout"}
+
+
 @app.middleware("http")
-async def require_api_token(request: Request, call_next):
-    if settings.basic_auth_user and settings.basic_auth_password:
-        encoded = request.headers.get("Authorization", "").removeprefix("Basic ")
-        try:
-            supplied = base64.b64decode(encoded).decode("utf-8")
-        except Exception:
-            supplied = ""
-        expected = f"{settings.basic_auth_user}:{settings.basic_auth_password}"
-        if not hmac.compare_digest(supplied, expected):
+async def require_session(request: Request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path not in _PUBLIC_API_PATHS:
+        token = request.cookies.get(settings.session_cookie_name, "")
+        if not auth.resolve_session(token):
             from fastapi.responses import JSONResponse
-            return JSONResponse({"detail": "需要登录"}, status_code=401,
-                                headers={"WWW-Authenticate": 'Basic realm="TradeFlow-AI"'})
-    if (request.url.path.startswith("/api/") and settings.api_token
-            and request.headers.get("X-TradeFlow-Token") != settings.api_token):
+            return JSONResponse({"detail": "未登录或登录已过期"}, status_code=401)
+    # X-TradeFlow-Token 是另一套独立于登录的机器令牌校验，登录/登出接口不应该被它挡住
+    # （前端从不发这个 header，配了 TRADEFLOW_API_TOKEN 的部署否则会导致登录本身 401）。
+    if (request.url.path.startswith("/api/") and request.url.path not in _PUBLIC_API_PATHS
+            and settings.api_token and request.headers.get("X-TradeFlow-Token") != settings.api_token):
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "无效的访问令牌"}, status_code=401)
     return await call_next(request)
 
 
-def _scope(x_tradeflow_token: str | None = Header(default=None),
-           x_tradeflow_user: str = Header(default="default"),
-           x_tradeflow_store: str = Header(default="default")) -> tuple[str, str]:
-    if settings.api_token and x_tradeflow_token != settings.api_token:
-        raise HTTPException(status_code=401, detail="无效的访问令牌")
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn, response: Response) -> Dict[str, Any]:
+    # 读密码哈希、bcrypt 校验、写 session 全部锁在同一个事务里（BEGIN IMMEDIATE 立刻拿写锁），
+    # 不然管理员重置密码的 DELETE FROM sessions 可能刚好夹在"校验通过"和"写 session"之间
+    # 跑完，旧密码这次登录写入的 session 就赶不上被清掉，重置形同虚设。
     with connect() as db:
-        ok = db.execute("SELECT 1 FROM stores WHERE id=? AND user_id=?",
-                        (x_tradeflow_store, x_tradeflow_user)).fetchone()
-    if not ok:
-        raise HTTPException(status_code=403, detail="无权访问该店铺")
-    return x_tradeflow_user, x_tradeflow_store
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT id,name,password_hash,is_admin FROM users WHERE username=?",
+                         (body.username,)).fetchone()
+        # 用户名不存在时也跑一次 bcrypt 比对（对着一个固定假 hash），让响应耗时接近，
+        # 避免通过时间差侧信道枚举出哪些用户名存在。
+        password_hash = row["password_hash"] if row and row["password_hash"] else auth.DUMMY_PASSWORD_HASH
+        ok = auth.verify_password(body.password, password_hash)
+        if not row or not row["password_hash"] or not ok:
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        token = auth.create_session_in(db, row["id"])
+    response.set_cookie(
+        settings.session_cookie_name, token, httponly=True, samesite="lax",
+        secure=settings.secure_cookies, max_age=settings.session_ttl_days * 86400,
+    )
+    return {"id": row["id"], "name": row["name"], "is_admin": bool(row["is_admin"])}
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response) -> Dict[str, bool]:
+    auth.delete_session(request.cookies.get(settings.session_cookie_name, ""))
+    response.delete_cookie(settings.session_cookie_name)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me(user_id: str = Depends(auth.current_user)) -> Dict[str, Any]:
+    with connect() as db:
+        row = db.execute("SELECT id,name,is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="未登录或登录已过期")
+    return {"id": row["id"], "name": row["name"], "is_admin": bool(row["is_admin"])}
+
+
+def require_admin(user_id: str = Depends(auth.current_user)) -> str:
+    with connect() as db:
+        row = db.execute("SELECT is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row or not row["is_admin"]:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user_id
+
+
+@app.get("/api/admin/users")
+def admin_list_users(_: str = Depends(require_admin)) -> Dict[str, Any]:
+    return {"items": accounts.list_users()}
+
+
+class AdminCreateUserIn(BaseModel):
+    username: str
+    password: str
+    name: str = ""
+    is_admin: bool = False
+
+
+@app.post("/api/admin/users")
+def admin_create_user(body: AdminCreateUserIn, _: str = Depends(require_admin)) -> Dict[str, Any]:
+    try:
+        user_id = accounts.create_user(body.username, body.password, body.name or None, body.is_admin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": user_id}
+
+
+class AdminResetPasswordIn(BaseModel):
+    password: str
+
+
+@app.post("/api/admin/users/{target_id}/reset-password")
+def admin_reset_password(target_id: str, body: AdminResetPasswordIn,
+                         _: str = Depends(require_admin)) -> Dict[str, bool]:
+    try:
+        accounts.reset_password(target_id, body.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @app.get("/api/stores")
-def stores(x_tradeflow_user: str = Header(default="default")) -> Dict[str, Any]:
+def stores(x_tradeflow_user: str = Depends(auth.current_user)) -> Dict[str, Any]:
     with connect() as db:
         rows = db.execute("SELECT id,name,marketplace,created_at FROM stores WHERE user_id=? ORDER BY created_at",
                           (x_tradeflow_user,)).fetchall()
@@ -102,14 +176,28 @@ class StoreIn(BaseModel):
 
 
 @app.post("/api/stores")
-def create_store(body: StoreIn, x_tradeflow_user: str = Header(default="default")) -> Dict[str, Any]:
+def create_store(body: StoreIn, x_tradeflow_user: str = Depends(auth.current_user)) -> Dict[str, Any]:
     import uuid
     store_id = f"store_{uuid.uuid4().hex[:10]}"
     with connect() as db:
-        db.execute("INSERT OR IGNORE INTO users(id,name) VALUES(?,?)", (x_tradeflow_user, x_tradeflow_user))
         db.execute("INSERT INTO stores(id,user_id,name,marketplace) VALUES(?,?,?,?)",
                    (store_id, x_tradeflow_user, body.name, body.marketplace))
     return {"id": store_id, "name": body.name, "marketplace": body.marketplace}
+
+
+def _current_store(x_tradeflow_user: str = Depends(auth.current_user),
+                   x_tradeflow_store: str = Header(default="default")) -> str:
+    """校验 X-TradeFlow-Store 确实属于当前登录用户，不能直接信任客户端自报的店铺 id
+    （否则能拼出 user_id=自己、store_id=别人店铺 的写入，见登录功能 review）。
+    不属于就直接 403——不要静默换成该用户名下别的店铺（哪怕是"自己的"），那样一个
+    过期/被篡改/切账号后没刷新的 header 会让写操作悄悄落到用户没有选中的店铺上，
+    比明确报错更危险。"""
+    with connect() as db:
+        ok = db.execute("SELECT 1 FROM stores WHERE id=? AND user_id=?",
+                        (x_tradeflow_store, x_tradeflow_user)).fetchone()
+    if not ok:
+        raise HTTPException(status_code=403, detail="无权访问该店铺")
+    return x_tradeflow_store
 
 
 def _agent_list() -> List[Dict[str, str]]:
@@ -394,8 +482,8 @@ def _session_owned(db, session_id: str, user_id: str, store_id: str | None = Non
 
 
 @app.get("/api/chat/sessions")
-def chat_sessions(x_tradeflow_user: str = Header(default="default"),
-                  x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def chat_sessions(x_tradeflow_user: str = Depends(auth.current_user),
+                  x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     with connect() as db:
         rows = db.execute(
             "SELECT id,title,agent,created_at,updated_at FROM chat_sessions "
@@ -413,32 +501,23 @@ def chat_sessions(x_tradeflow_user: str = Header(default="default"),
 
 @app.post("/api/chat/sessions")
 def create_chat_session(body: ChatSessionIn,
-                        x_tradeflow_user: str = Header(default="default"),
-                        x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+                        x_tradeflow_user: str = Depends(auth.current_user),
+                        x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
+    # x_tradeflow_store 已经过 _current_store 校验，保证确实属于当前用户，不需要再自己重查一遍。
     session_id = f"chat_{uuid.uuid4().hex[:12]}"
     title = _short_title(body.title)
     with connect() as db:
-        db.execute("INSERT OR IGNORE INTO users(id,name) VALUES(?,?)", (x_tradeflow_user, x_tradeflow_user))
-        store = db.execute(
-            "SELECT id FROM stores WHERE id=? AND user_id=?",
-            (x_tradeflow_store, x_tradeflow_user),
-        ).fetchone()
-        store_id = x_tradeflow_store if store else "default"
-        db.execute(
-            "INSERT OR IGNORE INTO stores(id,user_id,name,marketplace) VALUES('default',?,'默认店铺','US')",
-            (x_tradeflow_user,),
-        )
         db.execute(
             "INSERT INTO chat_sessions(id,user_id,store_id,title,agent) VALUES(?,?,?,?,?)",
-            (session_id, x_tradeflow_user, store_id, title, body.agent or "default"),
+            (session_id, x_tradeflow_user, x_tradeflow_store, title, body.agent or "default"),
         )
     return {"id": session_id, "title": title, "agent": body.agent or "default"}
 
 
 @app.get("/api/chat/sessions/{session_id}")
 def get_chat_session(session_id: str,
-                     x_tradeflow_user: str = Header(default="default"),
-                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+                     x_tradeflow_user: str = Depends(auth.current_user),
+                     x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     with connect() as db:
         row = _session_owned(db, session_id, x_tradeflow_user, x_tradeflow_store)
         if not row:
@@ -452,8 +531,8 @@ def get_chat_session(session_id: str,
 
 @app.post("/api/chat/sessions/{session_id}/messages")
 def add_chat_message(session_id: str, body: ChatMessageIn,
-                     x_tradeflow_user: str = Header(default="default"),
-                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+                     x_tradeflow_user: str = Depends(auth.current_user),
+                     x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     role = body.role if body.role in {"user", "assistant"} else ""
     content = (body.content or "").strip()
     if not role or not content:
@@ -508,21 +587,21 @@ def agents() -> List[Dict[str, str]]:
 
 # ---- 机会上新：真实持久化的 CRUD（B1） ----
 @app.get("/api/opportunities")
-def list_opportunities(x_tradeflow_user: str = Header(default="default"),
-                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def list_opportunities(x_tradeflow_user: str = Depends(auth.current_user),
+                       x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     return {"items": store.list_opps(x_tradeflow_user, x_tradeflow_store)}
 
 
 @app.post("/api/opportunities")
-def create_opportunity(body: Dict[str, Any], x_tradeflow_user: str = Header(default="default"),
-                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def create_opportunity(body: Dict[str, Any], x_tradeflow_user: str = Depends(auth.current_user),
+                       x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     # 入参是前端传的机会对象（name/cat/score/margin/…），存储层负责补 id/时间/去重。
     return store.add_opp(body, x_tradeflow_user, x_tradeflow_store)
 
 
 @app.delete("/api/opportunities/{opp_id}")
-def remove_opportunity(opp_id: str, x_tradeflow_user: str = Header(default="default"),
-                       x_tradeflow_store: str = Header(default="default")) -> Dict[str, bool]:
+def remove_opportunity(opp_id: str, x_tradeflow_user: str = Depends(auth.current_user),
+                       x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, bool]:
     return {"ok": store.delete_opp(opp_id, x_tradeflow_user, x_tradeflow_store)}
 
 
@@ -540,8 +619,8 @@ async def import_preview(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 @app.post("/api/imports")
 async def import_commit(file: UploadFile = File(...), mapping: str = Form(default="{}"),
-                        x_tradeflow_user: str = Header(default="default"),
-                        x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+                        x_tradeflow_user: str = Depends(auth.current_user),
+                        x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     content = await file.read()
     if len(content) > 80 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="文件不能超过 80MB")
@@ -555,20 +634,20 @@ async def import_commit(file: UploadFile = File(...), mapping: str = Form(defaul
 
 
 @app.get("/api/imports")
-def imports(x_tradeflow_user: str = Header(default="default"),
-            x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def imports(x_tradeflow_user: str = Depends(auth.current_user),
+            x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     return {"items": list_imports(x_tradeflow_user, x_tradeflow_store)}
 
 
 @app.get("/api/optimization/ads")
-def optimization_ads(x_tradeflow_user: str = Header(default="default"),
-                     x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def optimization_ads(x_tradeflow_user: str = Depends(auth.current_user),
+                     x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     return ads_overview(x_tradeflow_user, x_tradeflow_store)
 
 
 @app.get("/api/customers")
-def customers(x_tradeflow_user: str = Header(default="default"),
-              x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+def customers(x_tradeflow_user: str = Depends(auth.current_user),
+              x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     return customer_overview(x_tradeflow_user, x_tradeflow_store)
 
 
@@ -604,15 +683,15 @@ class OppSuggestIn(BaseModel):
 
 @app.post("/api/opportunities/suggest")
 def opportunities_suggest(body: OppSuggestIn,
-                          x_tradeflow_user: str = Header(default="default"),
-                          x_tradeflow_store: str = Header(default="default")) -> Dict[str, Any]:
+                          x_tradeflow_user: str = Depends(auth.current_user),
+                          x_tradeflow_store: str = Depends(_current_store)) -> Dict[str, Any]:
     return suggest_opportunities(
         body.query, body.top_n, competitor_rows(x_tradeflow_user, x_tradeflow_store))
 
 
 @app.post("/api/chat", response_model=ChatOut)
-def chat(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
-         x_tradeflow_store: str = Header(default="default")) -> ChatOut:
+def chat(body: ChatIn, x_tradeflow_user: str = Depends(auth.current_user),
+         x_tradeflow_store: str = Depends(_current_store)) -> ChatOut:
     steps: List[Dict[str, Any]] = []
 
     def observe(step: AgentStep) -> None:
@@ -651,8 +730,8 @@ def _sse(event: Dict[str, Any]) -> str:
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(body: ChatIn, x_tradeflow_user: str = Header(default="default"),
-                      x_tradeflow_store: str = Header(default="default")) -> StreamingResponse:
+async def chat_stream(body: ChatIn, x_tradeflow_user: str = Depends(auth.current_user),
+                      x_tradeflow_store: str = Depends(_current_store)) -> StreamingResponse:
     """SSE 流式版对话：边跑边把进度推给前端，避免长任务（抓竞品等）看起来像卡死。
 
     agent.run_stream 逐事件产出：("tools",…) 本轮要调的工具、("token",…) 最终答案的
