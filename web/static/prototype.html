@@ -284,9 +284,9 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance}
 .tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 label.fld{display:block;margin-bottom:14px}
 label.fld .cap{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px;font-weight:500}
-input[type=text],select,textarea{width:100%;font-family:inherit;font-size:13.5px;color:var(--text);
+input[type=text],input[type=password],select,textarea{width:100%;font-family:inherit;font-size:13.5px;color:var(--text);
   background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;padding:9px 11px;outline:none}
-input[type=text]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+input[type=text]:focus,input[type=password]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
 textarea{resize:vertical;line-height:1.55}
 .check{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
@@ -355,6 +355,24 @@ button.imgbox{font-family:inherit}
 .note svg{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:15px 16px}
 
+/* login screen — 独立全屏页，不透出应用界面 */
+.login-screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  background:radial-gradient(900px 500px at 50% 0%, var(--accent-weak) 0%, transparent 65%), var(--bg)}
+.login-screen.open{display:flex}
+.login-card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;box-shadow:0 24px 60px -24px rgba(13,138,128,.35),var(--shadow);padding:44px 38px}
+.login-brand{text-align:center;margin-bottom:32px}
+.login-brand .logo{width:52px;height:52px;border-radius:15px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-strong));
+  display:inline-grid;place-items:center;color:#fff;margin-bottom:16px;
+  box-shadow:0 10px 24px -8px rgba(13,138,128,.55)}
+.login-brand .logo svg{width:27px;height:27px}
+.login-brand h1{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-bottom:5px}
+.login-brand p{font-size:13px;color:var(--dim);margin:0}
+.login-card label.fld{margin-bottom:16px}
+.login-card input[type=text],.login-card input[type=password]{padding:11px 13px;font-size:14px}
+.login-card #loginBtn{padding:11px 13px;font-size:14px;font-weight:600;margin-top:6px}
+
 /* modal + toast */
 .overlay{position:fixed;inset:0;background:rgba(10,20,18,.5);display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
 .overlay.open{display:flex}
@@ -387,6 +405,7 @@ button.imgbox{font-family:inherit}
     </div>
     <button class="btn primary" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>新建店铺空间</button>
     <button class="icon-btn" id="themeBtn" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
+    <button class="icon-btn" id="logoutBtn" title="退出登录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
   </div>
 
   <div class="shell">
@@ -397,6 +416,7 @@ button.imgbox{font-family:inherit}
       <button class="nav-item" data-view="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>数据导入</button>
       <button class="nav-item" data-view="optimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.5.5 1 1.3 1 2.5h6c0-1.2.5-2 1-2.5A6 6 0 0 0 12 3z"/></svg>优化建议</button>
       <button class="nav-item" data-view="email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>客户跟踪</button>
+      <button class="nav-item" id="adminNavBtn" data-view="admin" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>账号管理</button>
       <div class="nav-label">产品功能</div>
       <div class="agent-nav" id="agentNav"></div>
       <div class="nav-label">最近对话</div>
@@ -558,11 +578,47 @@ button.imgbox{font-family:inherit}
         </div>
       </section>
 
+      <!-- ===== ADMIN（账号管理，仅管理员可见） ===== -->
+      <section class="view pad" data-v="admin">
+        <div class="page-head"><div class="txt"><h2>账号管理</h2><p>创建登录账号、查看已有账号、重置密码。仅管理员可见。</p></div></div>
+        <div class="grid" style="grid-template-columns:1fr 340px;align-items:start">
+          <div class="card" style="padding:6px 10px">
+            <div class="tbl-wrap"><table id="userTbl">
+              <tr><th>用户名</th><th>显示名</th><th>角色</th><th>创建时间</th><th></th></tr>
+            </table></div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:14px;margin-bottom:14px">新建账号</h3>
+            <label class="fld"><span class="cap">用户名</span><input type="text" id="newUserName" autocomplete="off"></label>
+            <label class="fld"><span class="cap">显示名</span><input type="text" id="newUserDisplay" placeholder="默认同用户名"></label>
+            <label class="fld"><span class="cap">初始密码</span><input type="password" id="newUserPass" autocomplete="new-password"></label>
+            <label class="fld" style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+              <input type="checkbox" id="newUserAdmin" style="width:auto"><span class="cap" style="margin:0">设为管理员</span>
+            </label>
+            <p id="newUserErr" style="color:var(--crit);font-size:12.5px;min-height:16px;margin:0 0 10px"></p>
+            <button class="btn primary" id="createUserBtn" style="width:100%;justify-content:center">创建账号</button>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
 </div>
 
 <div class="overlay" id="overlay"></div>
+<div class="login-screen open" id="loginOverlay">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5"/><path d="M16 7h5"/></svg></span>
+      <h1>TradeFlow AI</h1>
+      <p>跨境电商 AI 智能体工作台</p>
+    </div>
+    <label class="fld"><span class="cap">用户名</span><input type="text" id="loginUser" autocomplete="username"></label>
+    <label class="fld" style="margin-bottom:6px"><span class="cap">密码</span><input type="password" id="loginPass" autocomplete="current-password"></label>
+    <p id="loginErr" style="color:var(--crit);font-size:12.5px;min-height:16px;margin:0 0 14px"></p>
+    <button class="btn primary" id="loginBtn" style="width:100%;justify-content:center">登录</button>
+  </div>
+</div>
 <div class="toast-wrap" id="toasts"></div>
 
 <script>
@@ -582,9 +638,15 @@ button.imgbox{font-family:inherit}
   let stores=[{id:'default',name:'默认店铺',mk:'US',status:'good',sync:'未同步'}];
   let curStore='default';
   const nativeFetch=window.fetch.bind(window);
+  const AUTH_PATHS=['/api/auth/login','/api/auth/logout','/api/auth/me'];
   window.fetch=(input,init={})=>{const url=typeof input==='string'?input:input.url;
     if(url&&url.startsWith('/api/')){const headers=new Headers(init.headers||{});headers.set('X-TradeFlow-Store',curStore||'default');init={...init,headers};}
-    return nativeFetch(input,init);};
+    return nativeFetch(input,init).then(r=>{
+      // session 中途过期（不是登录/登出/me 这几个本来就该返回 401 的接口）时，把登录框重新弹出来，
+      // 而不是让各处的 .catch(()=>{}) 静默吞掉、页面停在一堆空数据上。
+      if(r.status===401&&url&&url.startsWith('/api/')&&!AUTH_PATHS.some(p=>url.startsWith(p)))showLogin();
+      return r;
+    });};
   const sColor={good:'var(--good)',warn:'var(--warn)',crit:'var(--crit)'},sText={good:'授权有效',warn:'即将过期',crit:'需重新授权'};
   function renderStores(){
     const m=$('#storeMenu');m.innerHTML='';
@@ -1378,26 +1440,125 @@ button.imgbox{font-family:inherit}
   $('#custAll').onchange=e=>{$$('#custTbl .cust').forEach(c=>c.checked=e.target.checked);updCount();};
   $('#sendMail').onclick=()=>toast('尚未配置 Buyer-Seller Messaging API，不会模拟发送');
 
-  /* ---------- init ---------- */
-  renderStores();loadChatSessions();loadOpps();loadOptimize();loadCustomers();renderTmpl();renderPreview();
-  fetch('/api/stores').then(r=>r.json()).then(d=>{if(d.items&&d.items.length){stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));curStore=stores[0].id;syncStore();loadChatSessions(true);loadOpps();loadOptimize();loadCustomers();}}).catch(()=>{});
+  /* ---------- 账号管理（仅管理员，需要 currentUser.is_admin） ---------- */
+  let currentUser=null;
+  function applyCurrentUser(u){
+    currentUser=u;
+    const btn=$('#adminNavBtn');
+    if(btn)btn.style.display=(u&&u.is_admin)?'':'none';
+    if(u&&u.is_admin)loadAdminUsers();
+  }
+  async function loadAdminUsers(){
+    try{
+      const r=await fetch('/api/admin/users');if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();renderAdminUsers(d.items||[]);
+    }catch(e){renderAdminUsers([],'账号列表加载失败：'+String(e.message||e));}
+  }
+  function renderAdminUsers(list,errorMsg=''){
+    const tb=$('#userTbl');[...tb.querySelectorAll('tr:not(:first-child)')].forEach(r=>r.remove());
+    if(!list.length){const tr=tb.insertRow(-1);tr.innerHTML=`<td colspan="5" style="text-align:center;color:var(--dim);padding:22px">${esc(errorMsg||'暂无账号')}</td>`;return;}
+    list.forEach(u=>{const tr=tb.insertRow(-1);
+      tr.innerHTML=`<td class="mono">${esc(u.username)}</td><td>${esc(u.name)}</td>`
+        +`<td>${u.is_admin?'<span class="pill accent">管理员</span>':'<span class="pill" style="background:var(--surface-2);color:var(--dim)">成员</span>'}</td>`
+        +`<td class="tnum" style="color:var(--dim)">${esc(u.created_at)}</td>`
+        +`<td></td>`;
+      const resetBtn=document.createElement('button');resetBtn.className='btn sm';resetBtn.textContent='重置密码';
+      resetBtn.onclick=()=>openResetPassword(u);
+      tr.lastElementChild.appendChild(resetBtn);
+    });
+  }
+  function openResetPassword(u){
+    modal(`<div class="mh"><h3>重置密码：${esc(u.username)}</h3><button class="x" data-close>×</button></div><div class="mb">
+      <label class="fld" style="margin:0"><span class="cap">新密码（至少 8 位）</span><input type="password" id="resetPassInp" autocomplete="new-password"></label>
+      <p id="resetPassErr" style="color:var(--crit);font-size:12.5px;min-height:16px;margin:8px 0 0"></p>
+    </div>
+    <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="doResetBtn">重置</button></div>`);
+    $('#doResetBtn').onclick=async()=>{
+      const pass=$('#resetPassInp').value,btn=$('#doResetBtn'),err=$('#resetPassErr');
+      btn.disabled=true;btn.textContent='重置中…';err.textContent='';
+      try{
+        const r=await fetch(`/api/admin/users/${encodeURIComponent(u.id)}/reset-password`,
+          {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
+        if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||'重置失败');}
+        closeModal();toast('已重置密码，该账号现有登录已全部失效');
+      }catch(e){err.textContent=String(e.message||e);btn.disabled=false;btn.textContent='重置';}
+    };
+  }
+  $('#createUserBtn').onclick=async()=>{
+    const name=$('#newUserName').value.trim(),display=$('#newUserDisplay').value.trim(),
+          pass=$('#newUserPass').value,isAdmin=$('#newUserAdmin').checked,
+          btn=$('#createUserBtn'),err=$('#newUserErr');
+    if(!name||!pass){err.textContent='请输入用户名和初始密码';return;}
+    btn.disabled=true;btn.textContent='创建中…';err.textContent='';
+    try{
+      const r=await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:name,password:pass,name:display,is_admin:isAdmin})});
+      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||'创建失败');}
+      $('#newUserName').value='';$('#newUserDisplay').value='';$('#newUserPass').value='';$('#newUserAdmin').checked=false;
+      toast('账号已创建');loadAdminUsers();
+    }catch(e){err.textContent=String(e.message||e);}
+    finally{btn.disabled=false;btn.textContent='创建账号';}
+  };
 
-  /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
-  (function initBackend(){
-    const sel=$('#agentSel');
-    fetch('/api/agents').then(r=>r.json()).then(list=>{
-      list.forEach(a=>{AGENT_CN[a.key]=a.key==='selection'?'机会上新':a.label;
-        if(sel&&a.key!=='default'){const o=document.createElement('option');
-          o.value=a.key;o.textContent=a.key==='selection'?'机会上新':a.label;o.title=a.desc||'';sel.appendChild(o);}});
-      renderAgentNav(list);
-    }).catch(()=>{});
-    fetch('/api/info').then(r=>r.json()).then(d=>{
-      const eng=d.provider==='mock'?'mock（未接真实模型）':(d.provider+' · '+d.model);
-      const foot=$('.side-foot');
-      if(foot)foot.innerHTML='引擎：<b>'+esc(eng)+'</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端';
-      const hint=$('.composer .hint'),s=stores.find(x=>x.id===curStore);
-      if(hint)hint.textContent='当前上下文：'+(s?s.name:'')+' · 已接入后端（'+eng+'）';
-    }).catch(()=>{});
-  })();
+  /* ---------- init（仅登录后才拉数据） ---------- */
+  function startApp(){
+    renderStores();renderTmpl();renderPreview();
+    // 先等 /api/stores 把 curStore 换成这个账号真实拥有的店铺，再发其余请求——
+    // 不然 loadChatSessions/loadOpps 等会先拿着初始占位值 curStore='default' 打出去，
+    // 对于店铺不叫这个 id 的账号（比如非首个账号）会被 _current_store 的强校验挡成 403，
+    // 等 /api/stores 回来才第二次自我纠正，中间会闪一批错误。
+    fetch('/api/stores').then(r=>r.json()).then(d=>{
+      if(d.items&&d.items.length){
+        stores=d.items.map(s=>({id:s.id,name:s.name,mk:s.marketplace,status:'good',sync:'未同步'}));
+        curStore=stores[0].id;syncStore();
+      }
+    }).catch(()=>{}).finally(()=>{
+      loadChatSessions();loadOpps();loadOptimize();loadCustomers();
+    });
+
+    /* 接后端元信息：填智能体选择器 + 真实展示名 + 引擎信息 */
+    (function initBackend(){
+      const sel=$('#agentSel');
+      fetch('/api/agents').then(r=>r.json()).then(list=>{
+        list.forEach(a=>{AGENT_CN[a.key]=a.key==='selection'?'机会上新':a.label;
+          if(sel&&a.key!=='default'){const o=document.createElement('option');
+            o.value=a.key;o.textContent=a.key==='selection'?'机会上新':a.label;o.title=a.desc||'';sel.appendChild(o);}});
+        renderAgentNav(list);
+      }).catch(()=>{});
+      fetch('/api/info').then(r=>r.json()).then(d=>{
+        const eng=d.provider==='mock'?'mock（未接真实模型）':(d.provider+' · '+d.model);
+        const foot=$('.side-foot');
+        if(foot)foot.innerHTML='引擎：<b>'+esc(eng)+'</b><br><span style="color:var(--good)">● 已连接</span> · 真实后端';
+        const hint=$('.composer .hint'),s=stores.find(x=>x.id===curStore);
+        if(hint)hint.textContent='当前上下文：'+(s?s.name:'')+' · 已接入后端（'+eng+'）';
+      }).catch(()=>{});
+    })();
+  }
+
+  /* ---------- 登录门禁 ---------- */
+  function showLogin(){$('#loginOverlay').classList.add('open');$('#loginUser').focus();}
+  function hideLogin(){$('#loginOverlay').classList.remove('open');}
+  async function doLogin(){
+    const btn=$('#loginBtn'),err=$('#loginErr');
+    if(btn.disabled)return; // 防连续 Enter/点击重复提交
+    const user=$('#loginUser').value.trim(),pass=$('#loginPass').value;
+    if(!user||!pass){err.textContent='请输入用户名和密码';return;}
+    btn.disabled=true;btn.textContent='登录中…';err.textContent='';
+    try{
+      const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||'登录失败');}
+      // 整页刷新而不是原地切换状态：避免"换账号但上一个账号的店铺/机会点/管理员列表
+      // 之类的前端状态没清干净"，以及和页面刚加载时那次 /api/auth/me 检查的竞态。
+      location.reload();
+    }catch(e){err.textContent=String(e.message||e);}
+    finally{btn.disabled=false;btn.textContent='登录';}
+  }
+  $('#loginBtn').onclick=doLogin;
+  [$('#loginUser'),$('#loginPass')].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();}));
+  $('#logoutBtn').onclick=async()=>{try{await fetch('/api/auth/logout',{method:'POST'});}catch(e){}location.reload();};
+
+  fetch('/api/auth/me').then(async r=>{
+    if(r.ok){hideLogin();applyCurrentUser(await r.json().catch(()=>null));startApp();}else{showLogin();}
+  }).catch(()=>showLogin());
 })();
 </script>

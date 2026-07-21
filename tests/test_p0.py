@@ -8,10 +8,11 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
+from config.settings import settings
 from tradeflow.compose import compose_system_prompt
 from tradeflow.registry import get_spec
 from web.app import ChatTurn, app, _import_data_scope, _import_data_user_input
-from web import database, store
+from web import auth, database, store
 from web.import_service import (ads_chat_analysis, ads_overview, competitor_rows, customer_overview, detect_report_type,
                                 parse_upload, save_import, suggest_mapping)
 from web.import_tools import build_import_tools
@@ -71,6 +72,22 @@ class TestTenantPersistence(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def _authed_client(self) -> TestClient:
+        """API 端点现在要求登录 session cookie；给 'default' 用户补一个可登录的账号密码，
+        登录后返回带 cookie 的 client，user_id 仍是 'default'，不影响其余用例的既有假设。
+        TestClient 走 http://testserver（非 https），Secure cookie 不会被回传，
+        跟本地用 http 调试时要设 TRADEFLOW_SECURE_COOKIES=0 是同一个道理，这里直接关掉。"""
+        original = settings.secure_cookies
+        settings.secure_cookies = False
+        self.addCleanup(setattr, settings, "secure_cookies", original)
+        with database.connect() as db:
+            db.execute("UPDATE users SET username=?, password_hash=? WHERE id='default'",
+                      ("tester", auth.hash_password("test-pass")))
+        client = TestClient(app)
+        r = client.post("/api/auth/login", json={"username": "tester", "password": "test-pass"})
+        assert r.status_code == 200, r.text
+        return client
+
     def test_opportunities_are_store_scoped(self):
         with database.connect() as db:
             db.execute("INSERT INTO stores(id,user_id,name,marketplace) VALUES('second','default','Second','US')")
@@ -79,7 +96,7 @@ class TestTenantPersistence(unittest.TestCase):
         self.assertEqual(store.list_opps("default", "second"), [])
 
     def test_chat_sessions_persist_messages(self):
-        client = TestClient(app)
+        client = self._authed_client()
         created = client.post("/api/chat/sessions", json={"title": "分析广告报表", "agent": "ads"}).json()
         session_id = created["id"]
         self.assertTrue(session_id.startswith("chat_"))
@@ -96,10 +113,22 @@ class TestTenantPersistence(unittest.TestCase):
         self.assertEqual([m["role"] for m in loaded["messages"]], ["user", "assistant"])
         self.assertIn("高 ACOS", loaded["messages"][1]["content"])
 
-    def test_chat_sessions_tolerate_stale_store_header(self):
-        client = TestClient(app)
+    def test_chat_sessions_reject_store_not_owned_by_user(self):
+        # 店铺归属现在是强校验（_current_store）：带一个不属于当前用户的/不存在的店铺 id
+        # 必须 403，不能像登录功能上线前那样静默放行或换成别的店铺——那样等于允许把
+        # 数据写进别人的店铺，或者用户完全没意识到请求被悄悄改路由到了别处。
+        client = self._authed_client()
         headers = {"X-TradeFlow-Store": "store_from_old_page"}
         created = client.post("/api/chat/sessions", json={"title": "旧页面店铺"}, headers=headers)
+        self.assertEqual(created.status_code, 403)
+
+        listed = client.get("/api/chat/sessions", headers=headers)
+        self.assertEqual(listed.status_code, 403)
+
+    def test_chat_sessions_work_with_owned_store_header(self):
+        client = self._authed_client()
+        headers = {"X-TradeFlow-Store": "default"}  # 'default' 用户名下真实拥有的那个店铺
+        created = client.post("/api/chat/sessions", json={"title": "真实店铺"}, headers=headers)
         self.assertEqual(created.status_code, 200)
         session_id = created.json()["id"]
 

@@ -29,6 +29,16 @@ def connect() -> Iterator[sqlite3.Connection]:
         db.close()
 
 
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, decl: str) -> bool:
+    """加列（幂等）。返回这次调用是不是真的新加了这一列——用来判断"列刚刚才出现"，
+    从而把一次性迁移逻辑绑定在这个时刻，而不是每次启动都重新判断、变成一条常驻规则。"""
+    cols = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column in cols:
+        return False
+    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    return True
+
+
 def init_db() -> None:
     with connect() as db:
         db.executescript(
@@ -83,8 +93,29 @@ def init_db() -> None:
               action TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS sessions (
+              token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+              FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             """
         )
+        _ensure_column(db, "users", "username", "TEXT")
+        _ensure_column(db, "users", "password_hash", "TEXT")
+        is_admin_col_new = _ensure_column(db, "users", "is_admin", "INTEGER NOT NULL DEFAULT 0")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username ON users(username) WHERE username IS NOT NULL")
+        # 一次性迁移，只在 is_admin 这一列刚被加出来的那次 init_db() 里跑：账号管理功能
+        # 上线前建的账号（比如最早那个登录账号）没有机会被标成管理员，只能靠 DEFAULT 0
+        # 落地。只在这一刻把最早建的真实账号补成管理员，不能做成"没有管理员就自动提权"
+        # 的常驻规则——那样以后任何原因导致零管理员（哪怕是 bug）都会在下次重启时把某个
+        # 普通成员悄悄提权，等于绕过审批的权限提升。
+        if is_admin_col_new:
+            row = db.execute(
+                "SELECT id FROM users WHERE username IS NOT NULL ORDER BY created_at, id LIMIT 1"
+            ).fetchone()
+            if row:
+                db.execute("UPDATE users SET is_admin=1 WHERE id=?", (row["id"],))
         db.execute("INSERT OR IGNORE INTO users(id,name) VALUES('default','默认用户')")
         db.execute("INSERT OR IGNORE INTO stores(id,user_id,name,marketplace) VALUES('default','default','默认店铺','US')")
 
